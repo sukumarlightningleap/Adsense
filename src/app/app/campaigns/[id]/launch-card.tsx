@@ -1,8 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, CheckCircle2, Loader2, Rocket } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ImageOff,
+  Loader2,
+  Rocket,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -109,19 +116,7 @@ export function LaunchCard({
 
         {/* Result */}
         {result && !result.ok && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-md border border-destructive/30 bg-destructive/[0.06] px-3 py-2.5 text-[13px] text-destructive"
-            role="alert"
-          >
-            <div className="font-medium">
-              Launch failed · {result.code}
-            </div>
-            <div className="mt-1 text-[12px] opacity-90">
-              {result.message}
-            </div>
-          </motion.div>
+          <PreflightErrorPanel result={result} />
         )}
 
         {result?.ok && (
@@ -186,6 +181,108 @@ export function LaunchCard({
         </div>
       </div>
     </div>
+  );
+}
+
+type FailedResult = Extract<LaunchActionResult, { ok: false }>;
+
+/**
+ * Surface known failure codes with rich, actionable UI. Falls back to
+ * a generic "code · message" panel for unknown codes.
+ */
+function PreflightErrorPanel({ result }: { result: FailedResult }) {
+  if (result.code === "ASSETS_MISSING") {
+    const missing = (result.details?.missingRoles as
+      | Array<{ key: string; label: string; aspect: string }>
+      | undefined) ?? [];
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-4"
+        role="alert"
+      >
+        <div className="flex items-start gap-2">
+          <ImageOff className="mt-0.5 size-4 shrink-0 text-amber-700" />
+          <div className="flex-1">
+            <div className="text-[13px] font-medium text-amber-900">
+              Assets missing
+            </div>
+            <p className="mt-1 text-[12px] text-amber-800/90">
+              PMAX requires every role below before Google will accept the
+              campaign. Edit the campaign or rebuild the draft from the wizard.
+            </p>
+            {missing.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {missing.map((m) => (
+                  <li
+                    key={m.key}
+                    className="flex items-center gap-2 rounded-md bg-amber-500/[0.08] px-2.5 py-1.5 text-[12px]"
+                  >
+                    <ImageOff className="size-3 text-amber-700" />
+                    <span className="font-medium text-amber-900">
+                      {m.label}
+                    </span>
+                    <code className="ml-auto font-mono text-[10px] text-amber-700">
+                      {m.aspect}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                href="/app/campaigns/new"
+                className="inline-flex h-8 items-center rounded-md border border-amber-500/40 bg-background px-3 text-[12px] font-medium text-amber-900 hover:bg-amber-500/10"
+              >
+                Build a new draft
+              </Link>
+              <Link
+                href="/app/assets"
+                className="inline-flex h-8 items-center rounded-md border border-border bg-background px-3 text-[12px] font-medium text-muted-foreground hover:bg-muted"
+              >
+                Upload assets
+              </Link>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (result.code === "BUDGET_OVER_CAP") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-[13px] text-amber-900"
+        role="alert"
+      >
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-700" />
+          <div>
+            <div className="font-medium">Budget over the safety cap</div>
+            <div className="mt-1 text-[12px] text-amber-800/90">
+              {result.message}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Generic fallback
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-md border border-destructive/30 bg-destructive/[0.06] px-3 py-2.5 text-[13px] text-destructive"
+      role="alert"
+    >
+      <div className="font-medium">Launch failed · {result.code}</div>
+      <div className="mt-1 text-[12px] opacity-90">{result.message}</div>
+    </motion.div>
   );
 }
 

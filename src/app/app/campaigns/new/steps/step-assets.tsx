@@ -266,13 +266,20 @@ function RoleSection({
                         )}
                         title={a.name ?? "Untitled"}
                       >
-                        <div className="aspect-square bg-muted">
+                        <div className="relative aspect-square bg-muted">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={`/api/assets/${a.id}/bytes`}
                             alt={a.name ?? "Asset"}
                             className="size-full object-contain p-2"
                           />
+                          {/* Dimension chip — info, not validation. sharp
+                              auto-crops at upload, so any aspect works. */}
+                          {a.width && a.height && (
+                            <span className="absolute bottom-1 left-1 rounded-sm bg-background/85 px-1 font-mono text-[9px] text-muted-foreground backdrop-blur-sm">
+                              {a.width}×{a.height}
+                            </span>
+                          )}
                         </div>
                         <div className="truncate px-2 py-1 text-left text-[10.5px]">
                           {a.name ?? "Untitled"}

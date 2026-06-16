@@ -23,19 +23,27 @@ import { buildCustomer } from "./client";
 import { launchSearchCampaign, type LaunchResult } from "./adapter";
 import { launchPmaxCampaign } from "./adapter-pmax";
 
+export type LauncherErrorCode =
+  | "NOT_FOUND"
+  | "NOT_DRAFT"
+  | "DEMO_BLOCKED"
+  | "CHANNEL_UNSUPPORTED"
+  | "BUDGET_OVER_CAP"
+  | "PAYLOAD_MISSING"
+  | "ASSETS_MISSING"
+  | "CREDENTIALS_MISSING"
+  | "SDK_FAILED";
+
 export type LauncherError = {
   ok: false;
-  code:
-    | "NOT_FOUND"
-    | "NOT_DRAFT"
-    | "DEMO_BLOCKED"
-    | "CHANNEL_UNSUPPORTED"
-    | "BUDGET_OVER_CAP"
-    | "PAYLOAD_MISSING"
-    | "ASSETS_MISSING"
-    | "CREDENTIALS_MISSING"
-    | "SDK_FAILED";
+  code: LauncherErrorCode;
   message: string;
+  /**
+   * Code-specific structured detail so the UI can render rich states
+   * (e.g. a missing-roles checklist for ASSETS_MISSING) rather than parse
+   * the message string.
+   */
+  details?: Record<string, unknown>;
 };
 
 export type LauncherSuccess = {
@@ -174,19 +182,31 @@ export function preflight(args: {
   // PMAX needs the minimum image attachments — catch this before any
   // SDK call so the operator sees a clean error.
   if (payload.channel === "PMAX") {
-    const missing: string[] = [];
-    if (!payload.assets?.logo_asset_id) missing.push("logo");
-    if (!payload.assets?.marketing_image_asset_id) missing.push("marketing_image");
-    if (!payload.assets?.square_marketing_image_asset_id) {
-      missing.push("square_marketing_image");
-    }
+    const REQUIRED: Array<{ key: string; label: string; aspect: string }> = [
+      { key: "logo_asset_id", label: "Logo", aspect: "1:1" },
+      {
+        key: "marketing_image_asset_id",
+        label: "Marketing image",
+        aspect: "1.91:1",
+      },
+      {
+        key: "square_marketing_image_asset_id",
+        label: "Square marketing image",
+        aspect: "1:1",
+      },
+    ];
+    const assets = payload.assets ?? {};
+    const missing = REQUIRED.filter(
+      (r) => !(assets as Record<string, unknown>)[r.key],
+    );
     if (missing.length > 0) {
       return {
         ok: false,
         error: {
           ok: false,
           code: "ASSETS_MISSING",
-          message: `PMAX requires: ${missing.join(", ")}. Attach assets in the wizard.`,
+          message: `PMAX requires ${missing.length} more asset${missing.length === 1 ? "" : "s"}: ${missing.map((m) => m.label).join(", ")}.`,
+          details: { missingRoles: missing },
         },
       };
     }

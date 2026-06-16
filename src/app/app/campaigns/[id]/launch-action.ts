@@ -24,7 +24,13 @@ import {
 
 export type LaunchActionResult =
   | { ok: true; profile: "test" | "prod"; providerCampaignId: string; resourceName: string }
-  | { ok: false; code: string; message: string };
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      /** Code-specific structured detail (e.g. missingRoles list for ASSETS_MISSING). */
+      details?: Record<string, unknown>;
+    };
 
 export async function launchCampaignAction(
   campaignId: string,
@@ -90,6 +96,7 @@ export async function launchCampaignAction(
       ok: false,
       code: pre.error.code,
       message: pre.error.message,
+      details: pre.error.details,
     };
   }
 
