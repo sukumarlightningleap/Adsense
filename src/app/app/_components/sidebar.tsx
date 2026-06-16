@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  Settings,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -38,6 +39,7 @@ const SECTIONS: Section[] = [
       { href: "/app/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/app/accounts", label: "Accounts", icon: Building2 },
       { href: "/app/assets", label: "Assets", icon: ImageIcon },
+      { href: "/app/settings", label: "Settings", icon: Settings },
     ],
   },
   {

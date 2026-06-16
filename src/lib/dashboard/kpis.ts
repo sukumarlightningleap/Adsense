@@ -70,15 +70,21 @@ function bigIntToNumber(b: bigint | number | null | undefined): number {
 /**
  * Resolve which AdsAccount IDs are in scope for this caller. Empty array
  * means "nothing to query" — callers should short-circuit on this.
+ *
+ * If `accountId` is passed, the result is filtered down to just that one
+ * (after still applying the scoping rule — so a user can't get KPIs for
+ * an account they don't own, and a demo user can't see live accounts).
  */
 async function accountIdsInScope(args: {
   userId: string;
   demoMode: boolean;
+  accountId?: string;
 }): Promise<string[]> {
+  const where = args.demoMode
+    ? { demoMode: true }
+    : { userId: args.userId, demoMode: false };
   const rows = await db.adsAccount.findMany({
-    where: args.demoMode
-      ? { demoMode: true }
-      : { userId: args.userId, demoMode: false },
+    where: args.accountId ? { ...where, id: args.accountId } : where,
     select: { id: true },
   });
   return rows.map((r) => r.id);
@@ -96,9 +102,11 @@ export async function getKpiSummary(args: {
   userId: string;
   demoMode: boolean;
   windowDays?: number;
+  /** Restrict to a single account. Still subject to scoping rules. */
+  accountId?: string;
 }): Promise<KpiSummary> {
-  const { userId, demoMode, windowDays = 30 } = args;
-  const accountIds = await accountIdsInScope({ userId, demoMode });
+  const { userId, demoMode, windowDays = 30, accountId } = args;
+  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
 
   if (accountIds.length === 0) {
     return {
@@ -171,9 +179,10 @@ export async function getDailyTrend(args: {
   userId: string;
   demoMode: boolean;
   windowDays?: number;
+  accountId?: string;
 }): Promise<TrendPoint[]> {
-  const { userId, demoMode, windowDays = 14 } = args;
-  const accountIds = await accountIdsInScope({ userId, demoMode });
+  const { userId, demoMode, windowDays = 14, accountId } = args;
+  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
   if (accountIds.length === 0) return [];
 
   const start = startOfUtcDay(windowDays - 1); // include today + N-1 days back
@@ -218,9 +227,10 @@ export async function getTopCampaigns(args: {
   demoMode: boolean;
   windowDays?: number;
   limit?: number;
+  accountId?: string;
 }): Promise<TopCampaign[]> {
-  const { userId, demoMode, windowDays = 30, limit = 5 } = args;
-  const accountIds = await accountIdsInScope({ userId, demoMode });
+  const { userId, demoMode, windowDays = 30, limit = 5, accountId } = args;
+  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
   if (accountIds.length === 0) return [];
 
   const start = startOfUtcDay(windowDays);
@@ -258,4 +268,148 @@ export async function getTopCampaigns(args: {
       };
     })
     .filter((c): c is TopCampaign => c !== null);
+}
+
+// ---------------------------------------------------------------------------
+// Accounts list with per-account stats
+// ---------------------------------------------------------------------------
+export type AccountListRow = {
+  id: string;
+  descriptiveName: string;
+  customerId: string;
+  loginCustomerId: string | null;
+  currencyCode: string | null;
+  timeZone: string | null;
+  demoMode: boolean;
+  createdAt: Date;
+  ga4Linked: boolean | null;
+  ga4PropertyId: string | null;
+  campaignCount: number;
+  /** Last 7-day KPI roll-up. */
+  recent: WindowMetrics;
+};
+
+/**
+ * Accounts in scope with per-account stat roll-up. Designed to avoid
+ * N+1 — one accounts query, one campaigns lookup, one groupBy across
+ * all campaigns, then joined in memory.
+ */
+export async function getAccountsList(args: {
+  userId: string;
+  demoMode: boolean;
+  windowDays?: number;
+}): Promise<AccountListRow[]> {
+  const { userId, demoMode, windowDays = 7 } = args;
+
+  const accounts = await db.adsAccount.findMany({
+    where: demoMode
+      ? { demoMode: true }
+      : { userId, demoMode: false },
+    include: {
+      ga4Link: true,
+      _count: { select: { campaigns: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (accounts.length === 0) return [];
+
+  const accountIds = accounts.map((a) => a.id);
+
+  // One query for the campaign → account mapping.
+  const campaigns = await db.campaign.findMany({
+    where: { accountId: { in: accountIds } },
+    select: { id: true, accountId: true },
+  });
+  const campToAccount = new Map(campaigns.map((c) => [c.id, c.accountId]));
+
+  // One groupBy across every campaign in scope.
+  const start = startOfUtcDay(windowDays);
+  const grouped = await db.dailyKpi.groupBy({
+    by: ["campaignId"],
+    where: {
+      campaign: { accountId: { in: accountIds } },
+      date: { gte: start },
+    },
+    _sum: {
+      impressions: true,
+      clicks: true,
+      costMicros: true,
+      conversions: true,
+    },
+  });
+
+  // Reduce into per-account totals.
+  const totals = new Map<string, WindowMetrics>();
+  for (const g of grouped) {
+    const accountId = campToAccount.get(g.campaignId);
+    if (!accountId) continue;
+    const acc = totals.get(accountId) ?? empty();
+    acc.impressions += bigIntToNumber(g._sum.impressions);
+    acc.clicks += bigIntToNumber(g._sum.clicks);
+    acc.spendUsd += microsToUsd(g._sum.costMicros);
+    acc.conversions += g._sum.conversions ?? 0;
+    totals.set(accountId, acc);
+  }
+
+  return accounts.map((a): AccountListRow => ({
+    id: a.id,
+    descriptiveName: a.descriptiveName ?? `Customer ${a.customerId}`,
+    customerId: a.customerId,
+    loginCustomerId: a.loginCustomerId,
+    currencyCode: a.currencyCode,
+    timeZone: a.timeZone,
+    demoMode: a.demoMode,
+    createdAt: a.createdAt,
+    ga4Linked: a.ga4Link?.linked ?? null,
+    ga4PropertyId: a.ga4Link?.ga4PropertyId ?? null,
+    campaignCount: a._count.campaigns,
+    recent: totals.get(a.id) ?? empty(),
+  }));
+}
+
+/**
+ * Fetch one account in scope — returns null if not found / not visible
+ * to the caller. Use for the account detail page.
+ */
+export async function getAccountDetail(args: {
+  userId: string;
+  demoMode: boolean;
+  accountId: string;
+}): Promise<AccountListRow | null> {
+  const where = args.demoMode
+    ? { demoMode: true }
+    : { userId: args.userId, demoMode: false };
+
+  const account = await db.adsAccount.findFirst({
+    where: { ...where, id: args.accountId },
+    include: {
+      ga4Link: true,
+      _count: { select: { campaigns: true } },
+    },
+  });
+  if (!account) return null;
+
+  const summary = await getKpiSummary({
+    userId: args.userId,
+    demoMode: args.demoMode,
+    windowDays: 7,
+    accountId: args.accountId,
+  });
+
+  return {
+    id: account.id,
+    descriptiveName:
+      account.descriptiveName ?? `Customer ${account.customerId}`,
+    customerId: account.customerId,
+    loginCustomerId: account.loginCustomerId,
+    currencyCode: account.currencyCode,
+    timeZone: account.timeZone,
+    demoMode: account.demoMode,
+    createdAt: account.createdAt,
+    ga4Linked: account.ga4Link?.linked ?? null,
+    ga4PropertyId: account.ga4Link?.ga4PropertyId ?? null,
+    campaignCount: account._count.campaigns,
+    recent: summary.current,
+  };
 }
