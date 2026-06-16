@@ -16,7 +16,10 @@
  * name on our Campaign row, and audit-logs the launch with the active
  * credential profile (test/prod) for traceability.
  */
-import type { LaunchPayload } from "@/lib/wizard/payload-builder";
+import type {
+  LaunchPayload,
+  SearchLaunchPayload,
+} from "@/lib/wizard/payload-builder";
 
 import { activeProfile } from "./auth";
 import { buildCustomer } from "./client";
@@ -57,7 +60,8 @@ export function launcherMaxDailyUsd(): number {
  */
 export type LaunchContext = {
   campaignId: string;
-  payload: LaunchPayload;
+  /** Day 4 narrows this to SearchLaunchPayload — only SEARCH ships. */
+  payload: SearchLaunchPayload;
   customerId: string;
   loginCustomerId: string | undefined;
 };
@@ -167,11 +171,24 @@ export function preflight(args: {
     };
   }
 
+  // SEARCH channel was already gated above — narrow accordingly.
+  const payload = campaign.payloadJson as unknown as LaunchPayload;
+  if (payload.channel !== "SEARCH") {
+    return {
+      ok: false,
+      error: {
+        ok: false,
+        code: "CHANNEL_UNSUPPORTED",
+        message: `Payload channel ${payload.channel} not supported by Phase 4 launcher.`,
+      },
+    };
+  }
+
   return {
     ok: true,
     ctx: {
       campaignId: campaign.id,
-      payload: campaign.payloadJson as unknown as LaunchPayload,
+      payload,
       customerId: account.customerId,
       loginCustomerId: account.loginCustomerId ?? undefined,
     },

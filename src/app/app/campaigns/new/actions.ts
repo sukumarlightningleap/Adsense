@@ -65,16 +65,23 @@ export async function saveCampaignAction(
   const yamlText = buildCampaignYaml(validated);
   const payload = buildLaunchPayload(validated);
 
+  // Channel-aware: pull budget + strategy from the right per-channel slice.
+  const isPmax = validated.channel === "PMAX";
+  const dailyUsd = isPmax
+    ? validated.pmaxBudget!.dailyUsd
+    : validated.searchBudget!.dailyUsd;
+  const biddingStrategy = isPmax
+    ? validated.pmaxBudget!.biddingStrategy
+    : validated.searchBudget!.biddingStrategy;
+
   const campaign = await db.campaign.create({
     data: {
       accountId: account.id,
       name: validated.book.title.slice(0, 255),
-      channelType: "SEARCH",
+      channelType: validated.channel,
       status: "PAUSED",
-      dailyBudgetMicros: BigInt(
-        Math.round(validated.budget.dailyUsd * 1_000_000),
-      ),
-      biddingStrategy: validated.budget.biddingStrategy,
+      dailyBudgetMicros: BigInt(Math.round(dailyUsd * 1_000_000)),
+      biddingStrategy,
       yamlText,
       payloadJson: payload,
       demoMode: false,
@@ -88,11 +95,21 @@ export async function saveCampaignAction(
       targetKind: "campaign",
       targetId: campaign.id,
       payload: {
+        channel: validated.channel,
         customerId: account.customerId,
-        biddingStrategy: validated.budget.biddingStrategy,
-        dailyUsd: validated.budget.dailyUsd,
-        headlineCount: validated.adCopy.headlines.length,
-        keywordCount: validated.adCopy.keywords.length,
+        biddingStrategy,
+        dailyUsd,
+        headlineCount: isPmax
+          ? validated.pmaxAdCopy!.headlines.length
+          : validated.searchAdCopy!.headlines.length,
+        ...(isPmax
+          ? {
+              longHeadlineCount: validated.pmaxAdCopy!.longHeadlines.length,
+              businessName: validated.pmaxAdCopy!.businessName,
+            }
+          : {
+              keywordCount: validated.searchAdCopy!.keywords.length,
+            }),
       },
     },
   });

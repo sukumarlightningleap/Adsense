@@ -6,6 +6,9 @@
  * We don't depend on a YAML library — the structure is small and known,
  * so emitting it by hand keeps the bundle slim and the output stable
  * (no key reorderings between releases of a library).
+ *
+ * Channel-aware: SEARCH and PMAX emit different `ad_copy` + `budget`
+ * sections so the operator can see exactly what'll be pushed.
  */
 import type { CampaignDraft } from "./schema";
 
@@ -13,7 +16,7 @@ export function buildCampaignYaml(draft: CampaignDraft): string {
   const lines: string[] = [];
 
   // ---- channel + launch status ------------------------------------------
-  lines.push(`channel: SEARCH`); // hard-coded for Phase 3
+  lines.push(`channel: ${draft.channel}`);
   lines.push(`launch_status: PAUSED`); // safety: never auto-enable
   lines.push("");
 
@@ -43,39 +46,74 @@ export function buildCampaignYaml(draft: CampaignDraft): string {
   }
   lines.push("");
 
-  // ---- budget + bidding -------------------------------------------------
-  lines.push(`budget:`);
-  lines.push(`  daily_usd: ${num(draft.budget.dailyUsd)}`);
-  lines.push(`  bidding_strategy: ${q(draft.budget.biddingStrategy)}`);
-  if (draft.budget.maxCpcUsd != null) {
-    lines.push(`  max_cpc_usd: ${num(draft.budget.maxCpcUsd)}`);
-  }
-  if (draft.budget.targetCpaUsd != null) {
-    lines.push(`  target_cpa_usd: ${num(draft.budget.targetCpaUsd)}`);
-  }
-  lines.push("");
+  // ---- budget + bidding + ad copy --------------------------------------
+  if (draft.channel === "SEARCH") {
+    const b = draft.searchBudget!;
+    const c = draft.searchAdCopy!;
 
-  // ---- ad copy ----------------------------------------------------------
-  lines.push(`ad_copy:`);
-  lines.push(`  headlines:`);
-  for (const h of draft.adCopy.headlines) {
-    lines.push(`    - ${q(h)}`);
-  }
-  lines.push(`  descriptions:`);
-  for (const d of draft.adCopy.descriptions) {
-    lines.push(`    - ${q(d)}`);
-  }
-  lines.push(`  keywords:`);
-  for (const k of draft.adCopy.keywords) {
-    lines.push(`    - ${q(k)}`);
-  }
-  if (
-    draft.adCopy.negativeKeywords &&
-    draft.adCopy.negativeKeywords.length > 0
-  ) {
-    lines.push(`  negative_keywords:`);
-    for (const k of draft.adCopy.negativeKeywords) {
-      lines.push(`    - ${q(k)}`);
+    lines.push(`budget:`);
+    lines.push(`  daily_usd: ${num(b.dailyUsd)}`);
+    lines.push(`  bidding_strategy: ${q(b.biddingStrategy)}`);
+    if (b.maxCpcUsd != null)
+      lines.push(`  max_cpc_usd: ${num(b.maxCpcUsd)}`);
+    if (b.targetCpaUsd != null)
+      lines.push(`  target_cpa_usd: ${num(b.targetCpaUsd)}`);
+    lines.push("");
+
+    lines.push(`ad_copy:`);
+    lines.push(`  headlines:`);
+    for (const h of c.headlines) lines.push(`    - ${q(h)}`);
+    lines.push(`  descriptions:`);
+    for (const d of c.descriptions) lines.push(`    - ${q(d)}`);
+    lines.push(`  keywords:`);
+    for (const k of c.keywords) lines.push(`    - ${q(k)}`);
+    if (c.negativeKeywords && c.negativeKeywords.length > 0) {
+      lines.push(`  negative_keywords:`);
+      for (const k of c.negativeKeywords) lines.push(`    - ${q(k)}`);
+    }
+  } else {
+    // PMAX
+    const b = draft.pmaxBudget!;
+    const c = draft.pmaxAdCopy!;
+    const a = draft.pmaxAssets;
+
+    lines.push(`budget:`);
+    lines.push(`  daily_usd: ${num(b.dailyUsd)}`);
+    lines.push(`  bidding_strategy: ${q(b.biddingStrategy)}`);
+    if (b.targetCpaUsd != null)
+      lines.push(`  target_cpa_usd: ${num(b.targetCpaUsd)}`);
+    if (b.targetRoas != null)
+      lines.push(`  target_roas: ${num(b.targetRoas)}`);
+    lines.push("");
+
+    lines.push(`ad_copy:`);
+    lines.push(`  business_name: ${q(c.businessName)}`);
+    lines.push(`  headlines: # short, <=30 chars`);
+    for (const h of c.headlines) lines.push(`    - ${q(h)}`);
+    lines.push(`  long_headlines: # <=90 chars`);
+    for (const h of c.longHeadlines) lines.push(`    - ${q(h)}`);
+    lines.push(`  descriptions:`);
+    for (const d of c.descriptions) lines.push(`    - ${q(d)}`);
+
+    if (a) {
+      const hasAny = Object.values(a).some(Boolean);
+      if (hasAny) {
+        lines.push("");
+        lines.push(`assets:`);
+        if (a.logoAssetId) lines.push(`  logo: ${q(a.logoAssetId)}`);
+        if (a.landscapeLogoAssetId)
+          lines.push(`  landscape_logo: ${q(a.landscapeLogoAssetId)}`);
+        if (a.marketingImageAssetId)
+          lines.push(`  marketing_image: ${q(a.marketingImageAssetId)}`);
+        if (a.squareMarketingImageAssetId)
+          lines.push(
+            `  square_marketing_image: ${q(a.squareMarketingImageAssetId)}`,
+          );
+        if (a.portraitMarketingImageAssetId)
+          lines.push(
+            `  portrait_marketing_image: ${q(a.portraitMarketingImageAssetId)}`,
+          );
+      }
     }
   }
 
@@ -84,14 +122,11 @@ export function buildCampaignYaml(draft: CampaignDraft): string {
 
 /** Single-line quoted string. Escapes embedded quotes. */
 function q(s: string): string {
-  // YAML allows single-quoted strings with `''` as an escape for `'`.
   return `'${s.replace(/'/g, "''")}'`;
 }
 
 /**
- * Multiline block scalar (`>-`) for long descriptions. The block scalar
- * folds newlines into spaces but preserves paragraphs separated by blank
- * lines — the shape readers expect.
+ * Multiline block scalar (`>-`) for long descriptions.
  */
 function block(s: string, indent: number): string {
   const pad = " ".repeat(indent);

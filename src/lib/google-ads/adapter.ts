@@ -22,7 +22,7 @@
  */
 import { enums, type Customer } from "google-ads-api";
 
-import type { LaunchPayload } from "@/lib/wizard/payload-builder";
+import type { SearchLaunchPayload } from "@/lib/wizard/payload-builder";
 
 import { resolveGeo } from "./geo";
 
@@ -44,7 +44,7 @@ export type OperationSummary = {
 
 export async function launchSearchCampaign(args: {
   customer: Customer;
-  payload: LaunchPayload;
+  payload: SearchLaunchPayload;
 }): Promise<LaunchResult> {
   const { customer, payload } = args;
 
@@ -90,7 +90,7 @@ export async function launchSearchCampaign(args: {
 // ---------------------------------------------------------------------------
 async function createBudget(
   customer: Customer,
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
 ): Promise<string> {
   const namePrefix = (payload.book.title || "Campaign").slice(0, 40);
   const result = await customer.campaignBudgets.create([
@@ -110,7 +110,7 @@ async function createBudget(
 // ---------------------------------------------------------------------------
 async function createCampaign(
   customer: Customer,
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
   budgetResourceName: string,
 ): Promise<string> {
   const title = (payload.book.title || "Untitled").slice(0, 60);
@@ -181,7 +181,7 @@ async function createCampaign(
 // ---------------------------------------------------------------------------
 async function createAdGroup(
   customer: Customer,
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
   campaignResourceName: string,
 ): Promise<string> {
   const title = (payload.book.title || "Untitled").slice(0, 40);
@@ -207,7 +207,7 @@ async function createAdGroup(
 // ---------------------------------------------------------------------------
 async function createResponsiveSearchAd(
   customer: Customer,
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
   adGroupResourceName: string,
 ): Promise<string> {
   const headlines = payload.ad_copy.headlines
@@ -237,7 +237,7 @@ async function createResponsiveSearchAd(
 // ---------------------------------------------------------------------------
 async function createKeywords(
   customer: Customer,
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
   adGroupResourceName: string,
 ): Promise<void> {
   const positive = payload.ad_copy.keywords.map((kw) => ({
@@ -294,7 +294,7 @@ function randomToken(bytes: number): string {
 }
 
 function summarize(
-  payload: LaunchPayload,
+  payload: SearchLaunchPayload,
   geoCount: number,
 ): OperationSummary[] {
   return [

@@ -15,31 +15,42 @@ type Props = {
 };
 
 export function StepCopy({ draft, onChange }: Props) {
-  function update(patch: Partial<CampaignDraft["adCopy"]>) {
-    onChange({ ...draft, adCopy: { ...draft.adCopy, ...patch } });
+  if (draft.channel === "PMAX") {
+    return <PmaxCopy draft={draft} onChange={onChange} />;
   }
+  return <SearchCopy draft={draft} onChange={onChange} />;
+}
+
+// ---------------------------------------------------------------------------
+// SEARCH
+// ---------------------------------------------------------------------------
+function SearchCopy({ draft, onChange }: Props) {
+  function update(patch: Partial<NonNullable<CampaignDraft["searchAdCopy"]>>) {
+    onChange({
+      ...draft,
+      searchAdCopy: { ...draft.searchAdCopy!, ...patch },
+    });
+  }
+  const c = draft.searchAdCopy!;
 
   return (
     <div className="space-y-6">
-      {/* Headlines */}
       <DynamicList
         label="Headlines"
         required
         helper="Google's Responsive Search Ads pick from these. 30 chars max. 3 minimum, 15 maximum."
-        items={draft.adCopy.headlines}
+        items={c.headlines}
         onChange={(headlines) => update({ headlines })}
         maxItems={15}
         maxLen={30}
         min={3}
         placeholder="Spark joy with our latest title"
       />
-
-      {/* Descriptions */}
       <DynamicList
         label="Descriptions"
         required
         helper="Used as the second line of the ad. 90 chars max. 2 minimum, 4 maximum."
-        items={draft.adCopy.descriptions}
+        items={c.descriptions}
         onChange={(descriptions) => update({ descriptions })}
         maxItems={4}
         maxLen={90}
@@ -47,28 +58,22 @@ export function StepCopy({ draft, onChange }: Props) {
         placeholder="Free shipping. 30-day returns. Read sample chapters now."
         multiline
       />
-
-      {/* Keywords */}
       <DynamicList
         label="Positive keywords"
         required
         helper="Phrases that trigger your ad. One per row."
-        items={draft.adCopy.keywords}
+        items={c.keywords}
         onChange={(keywords) => update({ keywords })}
         maxItems={500}
         maxLen={80}
         min={1}
         placeholder="ikigai book"
       />
-
-      {/* Negative keywords */}
       <DynamicList
         label="Negative keywords"
         helper="Phrases that should NOT trigger your ad."
-        items={draft.adCopy.negativeKeywords ?? []}
-        onChange={(negativeKeywords) =>
-          update({ negativeKeywords })
-        }
+        items={c.negativeKeywords ?? []}
+        onChange={(negativeKeywords) => update({ negativeKeywords })}
         maxItems={500}
         maxLen={80}
         min={0}
@@ -78,6 +83,96 @@ export function StepCopy({ draft, onChange }: Props) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// PMAX
+// ---------------------------------------------------------------------------
+function PmaxCopy({ draft, onChange }: Props) {
+  function update(patch: Partial<NonNullable<CampaignDraft["pmaxAdCopy"]>>) {
+    onChange({
+      ...draft,
+      pmaxAdCopy: { ...draft.pmaxAdCopy!, ...patch },
+    });
+  }
+  const c = draft.pmaxAdCopy!;
+
+  return (
+    <div className="space-y-6">
+      {/* Business name — REQUIRED, single value */}
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <Label htmlFor="businessName" className="text-sm font-medium">
+            Business name <span className="text-destructive">*</span>
+          </Label>
+          <span
+            className={cn(
+              "font-mono text-[11px]",
+              c.businessName.length === 0
+                ? "text-destructive"
+                : c.businessName.length > 25
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+            )}
+          >
+            {c.businessName.length} / 25
+          </span>
+        </div>
+        <Input
+          id="businessName"
+          value={c.businessName}
+          onChange={(e) => update({ businessName: e.target.value })}
+          maxLength={25}
+          placeholder="Adsense Books"
+          className="h-10"
+        />
+        <p className="text-[11.5px] text-muted-foreground">
+          Shown on every PMAX placement. Max 25 characters.
+        </p>
+      </div>
+
+      <DynamicList
+        label="Short headlines"
+        required
+        helper="Used across Search, Display, Discover. 30 chars max. 3 minimum, 15 maximum."
+        items={c.headlines}
+        onChange={(headlines) => update({ headlines })}
+        maxItems={15}
+        maxLen={30}
+        min={3}
+        placeholder="Find your ikigai today"
+      />
+
+      <DynamicList
+        label="Long headlines"
+        required
+        helper="Used for richer placements (Discover, YouTube). 90 chars max. 1 minimum, 5 maximum."
+        items={c.longHeadlines}
+        onChange={(longHeadlines) => update({ longHeadlines })}
+        maxItems={5}
+        maxLen={90}
+        min={1}
+        placeholder="Discover the Japanese secret to a long, joyful life — in 7 lessons."
+        multiline
+      />
+
+      <DynamicList
+        label="Descriptions"
+        required
+        helper="90 chars max. 2 minimum, 5 maximum."
+        items={c.descriptions}
+        onChange={(descriptions) => update({ descriptions })}
+        maxItems={5}
+        maxLen={90}
+        min={2}
+        placeholder="Free shipping. 30-day returns. Read sample chapters now."
+        multiline
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared dynamic list component
+// ---------------------------------------------------------------------------
 function DynamicList({
   label,
   helper,
@@ -111,11 +206,9 @@ function DynamicList({
     onChange([...items, v]);
     setDraftValue("");
   }
-
   function remove(i: number) {
     onChange(items.filter((_, idx) => idx !== i));
   }
-
   function update(i: number, v: string) {
     onChange(items.map((it, idx) => (idx === i ? v : it)));
   }
@@ -147,7 +240,6 @@ function DynamicList({
       {helper && (
         <p className="text-[11.5px] text-muted-foreground">{helper}</p>
       )}
-
       {items.length > 0 && (
         <ul className="space-y-2">
           {items.map((it, i) => (
@@ -171,7 +263,6 @@ function DynamicList({
           ))}
         </ul>
       )}
-
       <div className="flex items-start gap-2">
         <InputEl
           value={draftValue}

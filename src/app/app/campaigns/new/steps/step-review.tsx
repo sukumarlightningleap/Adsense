@@ -35,7 +35,7 @@ export function StepReview({ accounts, draft, error, pending }: Props) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <SummarySection title="Account">
+        <SummarySection title={`Account · ${draft.channel}`}>
           <Row label="Account" value={account?.name ?? "—"} />
           <Row label="Customer ID" value={account?.customerId ?? "—"} mono />
           <Row label="Currency" value={account?.currencyCode ?? "—"} />
@@ -66,41 +66,103 @@ export function StepReview({ accounts, draft, error, pending }: Props) {
         </SummarySection>
 
         <SummarySection title="Budget &amp; Bidding">
-          <Row label="Daily budget" value={`$${draft.budget.dailyUsd}/day`} />
-          <Row
-            label="Strategy"
-            value={draft.budget.biddingStrategy}
-            mono
-          />
-          {draft.budget.maxCpcUsd != null && (
-            <Row label="Max CPC" value={`$${draft.budget.maxCpcUsd}`} />
-          )}
-          {draft.budget.targetCpaUsd != null && (
-            <Row label="Target CPA" value={`$${draft.budget.targetCpaUsd}`} />
+          {draft.channel === "SEARCH" ? (
+            <>
+              <Row
+                label="Daily budget"
+                value={`$${draft.searchBudget!.dailyUsd}/day`}
+              />
+              <Row
+                label="Strategy"
+                value={draft.searchBudget!.biddingStrategy}
+                mono
+              />
+              {draft.searchBudget!.maxCpcUsd != null && (
+                <Row label="Max CPC" value={`$${draft.searchBudget!.maxCpcUsd}`} />
+              )}
+              {draft.searchBudget!.targetCpaUsd != null && (
+                <Row
+                  label="Target CPA"
+                  value={`$${draft.searchBudget!.targetCpaUsd}`}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <Row
+                label="Daily budget"
+                value={`$${draft.pmaxBudget!.dailyUsd}/day`}
+              />
+              <Row
+                label="Strategy"
+                value={draft.pmaxBudget!.biddingStrategy}
+                mono
+              />
+              {draft.pmaxBudget!.targetCpaUsd != null && (
+                <Row
+                  label="Target CPA"
+                  value={`$${draft.pmaxBudget!.targetCpaUsd}`}
+                />
+              )}
+              {draft.pmaxBudget!.targetRoas != null && (
+                <Row
+                  label="Target ROAS"
+                  value={`${draft.pmaxBudget!.targetRoas} (${(draft.pmaxBudget!.targetRoas * 100).toFixed(0)}%)`}
+                />
+              )}
+            </>
           )}
         </SummarySection>
       </div>
 
       {/* Ad copy counts */}
       <SummarySection title="Ad copy">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <CountTile
-            label="Headlines"
-            count={draft.adCopy.headlines.length}
-          />
-          <CountTile
-            label="Descriptions"
-            count={draft.adCopy.descriptions.length}
-          />
-          <CountTile
-            label="Keywords"
-            count={draft.adCopy.keywords.length}
-          />
-          <CountTile
-            label="Negatives"
-            count={draft.adCopy.negativeKeywords?.length ?? 0}
-          />
-        </div>
+        {draft.channel === "SEARCH" ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <CountTile
+              label="Headlines"
+              count={draft.searchAdCopy!.headlines.length}
+            />
+            <CountTile
+              label="Descriptions"
+              count={draft.searchAdCopy!.descriptions.length}
+            />
+            <CountTile
+              label="Keywords"
+              count={draft.searchAdCopy!.keywords.length}
+            />
+            <CountTile
+              label="Negatives"
+              count={draft.searchAdCopy!.negativeKeywords?.length ?? 0}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <CountTile
+              label="Short headlines"
+              count={draft.pmaxAdCopy!.headlines.length}
+            />
+            <CountTile
+              label="Long headlines"
+              count={draft.pmaxAdCopy!.longHeadlines.length}
+            />
+            <CountTile
+              label="Descriptions"
+              count={draft.pmaxAdCopy!.descriptions.length}
+            />
+            <div className="rounded-lg border border-border bg-background px-3 py-2">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                Business name
+              </div>
+              <div
+                className="mt-1 truncate text-[13px] font-medium"
+                title={draft.pmaxAdCopy!.businessName}
+              >
+                {draft.pmaxAdCopy!.businessName || "—"}
+              </div>
+            </div>
+          </div>
+        )}
       </SummarySection>
 
       {/* YAML preview */}
@@ -108,7 +170,7 @@ export function StepReview({ accounts, draft, error, pending }: Props) {
         <div className="mb-3 flex items-center gap-2">
           <FileText className="size-3.5 text-muted-foreground" />
           <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-            YAML payload (what Phase 4 will push to Google Ads)
+            YAML payload (what the launcher will push to Google Ads)
           </span>
         </div>
         <pre className="max-h-80 overflow-auto rounded-xl border border-border bg-muted/30 p-4 font-mono text-[11px] leading-5">
@@ -120,9 +182,10 @@ export function StepReview({ accounts, draft, error, pending }: Props) {
       <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2.5 text-[12.5px] text-emerald-700">
         <Check className="mt-0.5 size-3.5 shrink-0" />
         <div>
-          <span className="font-medium">Saved as PAUSED.</span> Nothing
-          pushes to Google Ads yet — Phase 4 wires the live launcher. You
-          can edit, delete, or launch the draft from its detail page.
+          <span className="font-medium">Saved as PAUSED.</span>{" "}
+          {draft.channel === "PMAX"
+            ? "PMAX launch wiring lands in Phase 6 Day 2; for now you can save the draft and inspect the payload."
+            : "Nothing pushes to Google Ads yet — open the campaign detail page to launch."}
         </div>
       </div>
 
@@ -146,6 +209,9 @@ export function StepReview({ accounts, draft, error, pending }: Props) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// UI atoms (unchanged)
+// ---------------------------------------------------------------------------
 function SummarySection({
   title,
   children,
@@ -195,9 +261,7 @@ function CountTile({ label, count }: { label: string; count: number }) {
       <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 text-lg font-semibold tracking-tight">
-        {count}
-      </div>
+      <div className="mt-1 text-lg font-semibold tracking-tight">{count}</div>
     </div>
   );
 }
