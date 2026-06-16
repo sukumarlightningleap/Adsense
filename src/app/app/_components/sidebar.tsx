@@ -9,13 +9,14 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
-  Settings,
   Users,
   type LucideIcon,
 } from "lucide-react";
 
 import { LogoLockup } from "@/components/shared/logo";
 import { cn } from "@/lib/utils";
+
+import { DemoToggle } from "./demo-toggle";
 
 type SectionItem = {
   href: string;
@@ -57,15 +58,22 @@ type Props = {
     role: "admin" | "member" | "demo";
   };
   signOutAction: () => Promise<void>;
+  /** Effective demo mode (after role rules). */
+  demoMode: boolean;
+  /** Admin-only toggle action. Sidebar hides the toggle for non-admins. */
+  setDemoModeAction: (value: boolean) => Promise<void>;
 };
 
-export function Sidebar({ user, signOutAction }: Props) {
+export function Sidebar({
+  user,
+  signOutAction,
+  demoMode,
+  setDemoModeAction,
+}: Props) {
   const pathname = usePathname();
   const isAdmin = user.role === "admin";
 
   function isActive(href: string): boolean {
-    // /app should match ONLY exactly — otherwise everything under /app
-    // would highlight it as well.
     if (href === "/app") return pathname === "/app";
     return pathname === href || pathname.startsWith(`${href}/`);
   }
@@ -85,6 +93,16 @@ export function Sidebar({ user, signOutAction }: Props) {
           <LogoLockup />
         </Link>
       </div>
+
+      {/* Demo toggle (admin only) */}
+      {isAdmin && (
+        <div className="border-b border-border px-4 py-3">
+          <div className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Dataset
+          </div>
+          <DemoToggle current={demoMode} setAction={setDemoModeAction} />
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
@@ -149,11 +167,6 @@ export function Sidebar({ user, signOutAction }: Props) {
   );
 }
 
-/**
- * Mobile top bar — shown on small screens where the sidebar is hidden.
- * Just the brand mark and a "Menu" placeholder for now (full mobile menu
- * comes later if needed; current target is desktop ops users).
- */
 export function MobileTopBar({
   signOutAction,
 }: {
