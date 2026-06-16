@@ -1,0 +1,253 @@
+// Adsense — Postgres schema (Prisma).
+//
+// Ported from adwords-benchmarks/src/launcher/db/models.py (SQLAlchemy).
+// Key conventions kept identical so the mental model carries over:
+//
+//  - Every owned row carries `userId` → per-user data isolation at query time.
+//  - Demo data carries `demoMode = true`. Demo is **org-wide**: every demo
+//    user sees the same shared set. Live data is per-user.
+//  - Money stays in MICROS at the DB boundary (matches Google Ads native
+//    shape). UI converts to dollars at render time.
+//  - The old "Account" model is RENAMED here to `AdsAccount` to avoid a
+//    name clash with NextAuth's future OAuth `Account` model.
+
+// Prisma 7: the `datasource` block now only declares the PROVIDER. The
+// connection URL lives in `prisma.config.ts` (CLI) and is passed to the
+// Neon adapter at runtime in `src/lib/db.ts` (client).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+// ---------------------------------------------------------------------------
+// Enums (Postgres-backed for type safety + cheap storage)
+// ---------------------------------------------------------------------------
+enum UserRole {
+  admin
+  member
+  demo
+}
+
+enum CampaignStatus {
+  ENABLED
+  PAUSED
+  REMOVED
+}
+
+enum ChannelType {
+  SEARCH
+  PMAX
+  DISPLAY
+  VIDEO
+  DISCOVERY
+}
+
+enum AssetKind {
+  image
+  logo
+  pdf
+  video
+}
+
+enum AssetRole {
+  marketing_image
+  square_marketing_image
+  portrait_marketing_image
+  logo
+  square_logo
+  landscape_logo
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  hashedPassword String    @map("hashed_password")
+  // admin: everything + can create users.
+  // member: live data only; demo toggle is hidden.
+  // demo:   demo data only; demo toggle is forced on.
+  role           UserRole  @default(member)
+  isActive       Boolean   @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  accounts     AdsAccount[]
+  uploadedAssets Asset[]    @relation("AssetUploader")
+  auditEntries AuditLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// AdsAccount — a Google Ads customer account under management.
+// (Renamed from `Account` to avoid clash with NextAuth's OAuth Account model.)
+// ---------------------------------------------------------------------------
+model AdsAccount {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  provider          String   @default("google_ads")
+  customerId        String   @map("customer_id")
+  descriptiveName   String?  @map("descriptive_name")
+  loginCustomerId   String?  @map("login_customer_id")
+  currencyCode      String?  @map("currency_code")
+  timeZone          String?  @map("time_zone")
+  demoMode          Boolean  @default(false) @map("demo_mode")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns          Campaign[]
+  assets             Asset[]             @relation("AssetAccount")
+  benchmarkSnapshots BenchmarkSnapshot[]
+  ga4Link            Ga4LinkStatus?
+
+  @@unique([userId, provider, customerId], name: "uq_account_user_provider_customer")
+  @@index([userId])
+  @@index([demoMode])
+  @@map("ads_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Campaign
+// ---------------------------------------------------------------------------
+model Campaign {
+  id                  String         @id @default(cuid())
+  accountId           String         @map("account_id")
+  providerCampaignId  String?        @map("provider_campaign_id") // numeric Google Ads campaign ID
+  name                String
+  channelType         ChannelType    @map("channel_type")
+  status              CampaignStatus @default(PAUSED)
+  dailyBudgetMicros   BigInt?        @map("daily_budget_micros")
+  biddingStrategy     String?        @map("bidding_strategy") // MAXIMIZE_CLICKS / TARGET_CPA / MAXIMIZE_CONVERSIONS
+  yamlText            String?        @map("yaml_text")        // last YAML payload built
+  demoMode            Boolean        @default(false) @map("demo_mode")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  account        AdsAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  dailyKpis      DailyKpi[]
+  campaignAssets CampaignAsset[]
+
+  @@index([accountId])
+  @@index([providerCampaignId])
+  @@index([demoMode])
+  @@map("campaigns")
+}
+
+// ---------------------------------------------------------------------------
+// DailyKpi — one row per campaign per date. Idempotent re-syncs via unique key.
+// ---------------------------------------------------------------------------
+model DailyKpi {
+  id                    String   @id @default(cuid())
+  campaignId            String   @map("campaign_id")
+  date                  DateTime @db.Date
+  impressions           BigInt   @default(0)
+  clicks                BigInt   @default(0)
+  costMicros            BigInt   @default(0) @map("cost_micros")
+  conversions           Float    @default(0)
+  conversionValueMicros BigInt   @default(0) @map("conversion_value_micros")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date], name: "uq_daily_kpi_campaign_date")
+  @@index([campaignId])
+  @@map("daily_kpis")
+}
+
+// ---------------------------------------------------------------------------
+// Asset — image / logo / pdf / video bytes stored in Postgres.
+// userId = uploader (org-wide pool — any campaign on any account can link).
+// accountId = optional "first uploaded for" tag.
+// ---------------------------------------------------------------------------
+model Asset {
+  id                   String    @id @default(cuid())
+  userId               String?   @map("user_id")
+  accountId            String?   @map("account_id")
+  name                 String?
+  kind                 AssetKind
+  mime                 String
+  sha256               String
+  bytes                Bytes
+  providerResourceName String?   @map("provider_resource_name")
+  demoMode             Boolean   @default(false) @map("demo_mode")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  uploader      User?           @relation("AssetUploader", fields: [userId], references: [id], onDelete: SetNull)
+  account       AdsAccount?     @relation("AssetAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  campaignLinks CampaignAsset[]
+
+  @@index([userId])
+  @@index([accountId])
+  @@index([sha256])
+  @@index([demoMode])
+  @@map("assets")
+}
+
+model CampaignAsset {
+  campaignId String    @map("campaign_id")
+  assetId    String    @map("asset_id")
+  role       AssetRole
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, assetId])
+  @@map("campaign_assets")
+}
+
+// ---------------------------------------------------------------------------
+// BenchmarkSnapshot — output of adwords_benchmark, persisted per account.
+// ---------------------------------------------------------------------------
+model BenchmarkSnapshot {
+  id            String   @id @default(cuid())
+  accountId     String   @map("account_id")
+  generatedAt   DateTime @default(now()) @map("generated_at")
+  schemaVersion String   @default("1") @map("schema_version")
+  reportJson    Json     @map("report_json")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("benchmark_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// Ga4LinkStatus — one row per account.
+// ---------------------------------------------------------------------------
+model Ga4LinkStatus {
+  accountId     String    @id @map("account_id")
+  ga4PropertyId String?   @map("ga4_property_id")
+  linked        Boolean   @default(false)
+  lastCheckedAt DateTime? @map("last_checked_at")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("ga4_link_status")
+}
+
+// ---------------------------------------------------------------------------
+// AuditLog — immutable who-did-what trail.
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String // "user.login", "user.create", "campaign.launch", etc.
+  targetKind String?  @map("target_kind")
+  targetId   String?  @map("target_id")
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_log")
+}
