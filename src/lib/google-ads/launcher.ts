@@ -16,14 +16,12 @@
  * name on our Campaign row, and audit-logs the launch with the active
  * credential profile (test/prod) for traceability.
  */
-import type {
-  LaunchPayload,
-  SearchLaunchPayload,
-} from "@/lib/wizard/payload-builder";
+import type { LaunchPayload } from "@/lib/wizard/payload-builder";
 
 import { activeProfile } from "./auth";
 import { buildCustomer } from "./client";
 import { launchSearchCampaign, type LaunchResult } from "./adapter";
+import { launchPmaxCampaign } from "./adapter-pmax";
 
 export type LauncherError = {
   ok: false;
@@ -34,6 +32,7 @@ export type LauncherError = {
     | "CHANNEL_UNSUPPORTED"
     | "BUDGET_OVER_CAP"
     | "PAYLOAD_MISSING"
+    | "ASSETS_MISSING"
     | "CREDENTIALS_MISSING"
     | "SDK_FAILED";
   message: string;
@@ -60,8 +59,7 @@ export function launcherMaxDailyUsd(): number {
  */
 export type LaunchContext = {
   campaignId: string;
-  /** Day 4 narrows this to SearchLaunchPayload — only SEARCH ships. */
-  payload: SearchLaunchPayload;
+  payload: LaunchPayload;
   customerId: string;
   loginCustomerId: string | undefined;
 };
@@ -103,13 +101,13 @@ export function preflight(args: {
       },
     };
   }
-  if (campaign.channelType !== "SEARCH") {
+  if (campaign.channelType !== "SEARCH" && campaign.channelType !== "PMAX") {
     return {
       ok: false,
       error: {
         ok: false,
         code: "CHANNEL_UNSUPPORTED",
-        message: `Channel ${campaign.channelType} not supported yet. Only SEARCH ships in Phase 4.`,
+        message: `Channel ${campaign.channelType} not supported. SEARCH (Phase 4) and PMAX (Phase 6) only.`,
       },
     };
   }
@@ -171,17 +169,27 @@ export function preflight(args: {
     };
   }
 
-  // SEARCH channel was already gated above — narrow accordingly.
   const payload = campaign.payloadJson as unknown as LaunchPayload;
-  if (payload.channel !== "SEARCH") {
-    return {
-      ok: false,
-      error: {
+
+  // PMAX needs the minimum image attachments — catch this before any
+  // SDK call so the operator sees a clean error.
+  if (payload.channel === "PMAX") {
+    const missing: string[] = [];
+    if (!payload.assets?.logo_asset_id) missing.push("logo");
+    if (!payload.assets?.marketing_image_asset_id) missing.push("marketing_image");
+    if (!payload.assets?.square_marketing_image_asset_id) {
+      missing.push("square_marketing_image");
+    }
+    if (missing.length > 0) {
+      return {
         ok: false,
-        code: "CHANNEL_UNSUPPORTED",
-        message: `Payload channel ${payload.channel} not supported by Phase 4 launcher.`,
-      },
-    };
+        error: {
+          ok: false,
+          code: "ASSETS_MISSING",
+          message: `PMAX requires: ${missing.join(", ")}. Attach assets in the wizard.`,
+        },
+      };
+    }
   }
 
   return {
@@ -207,10 +215,24 @@ export async function executeLaunch(
       customerId: ctx.customerId,
       loginCustomerId: ctx.loginCustomerId,
     });
-    const result = await launchSearchCampaign({
-      customer,
-      payload: ctx.payload,
-    });
+    // No-dashes form of the customer ID — used inside PMAX for the
+    // `customers/{id}/assetGroups/-1` temp resource name.
+    const customerIdClean = ctx.customerId.replace(/-/g, "").trim();
+
+    let result;
+    if (ctx.payload.channel === "PMAX") {
+      result = await launchPmaxCampaign({
+        customer,
+        payload: ctx.payload,
+        customerId: customerIdClean,
+      });
+    } else {
+      result = await launchSearchCampaign({
+        customer,
+        payload: ctx.payload,
+      });
+    }
+
     return { ok: true, profile: activeProfile(), result };
   } catch (e) {
     return {
