@@ -72,7 +72,7 @@ export default async function CampaignsPage({
             />
           )}
           {user.role !== "demo" && !demoMode && (
-            <Button render={<Link href="/app/campaigns/new" />} disabled>
+            <Button render={<Link href="/app/campaigns/new" />}>
               New campaign
             </Button>
           )}
