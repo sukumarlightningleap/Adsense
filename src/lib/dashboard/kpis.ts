@@ -90,6 +90,30 @@ async function accountIdsInScope(args: {
   return rows.map((r) => r.id);
 }
 
+/**
+ * Build the where-clause that filters DailyKpi rows for a given scope.
+ * Centralised so every kpi function applies the same scoping rules
+ * (campaignId trumps accountId; both are subject to the in-scope account
+ * filter to prevent cross-tenant leaks).
+ */
+async function buildKpiWhere(args: {
+  userId: string;
+  demoMode: boolean;
+  accountId?: string;
+  campaignId?: string;
+}): Promise<{ accountIds: string[]; whereCampaign: { accountId: { in: string[] } } } | null> {
+  const accountIds = await accountIdsInScope({
+    userId: args.userId,
+    demoMode: args.demoMode,
+    accountId: args.accountId,
+  });
+  if (accountIds.length === 0) return null;
+  return {
+    accountIds,
+    whereCampaign: { accountId: { in: accountIds } },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -104,28 +128,31 @@ export async function getKpiSummary(args: {
   windowDays?: number;
   /** Restrict to a single account. Still subject to scoping rules. */
   accountId?: string;
+  /** Restrict further to a single campaign. */
+  campaignId?: string;
 }): Promise<KpiSummary> {
-  const { userId, demoMode, windowDays = 30, accountId } = args;
-  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
-
-  if (accountIds.length === 0) {
-    return {
-      current: empty(),
-      prior: empty(),
-      accountsInScope: 0,
-    };
+  const { userId, demoMode, windowDays = 30, accountId, campaignId } = args;
+  const scope = await buildKpiWhere({
+    userId,
+    demoMode,
+    accountId,
+    campaignId,
+  });
+  if (!scope) {
+    return { current: empty(), prior: empty(), accountsInScope: 0 };
   }
 
   const currentStart = startOfUtcDay(windowDays);
   const priorStart = startOfUtcDay(windowDays * 2);
-  const priorEnd = currentStart; // exclusive — strictly less than
+  const priorEnd = currentStart;
+
+  const baseFilter = campaignId
+    ? { campaignId, campaign: scope.whereCampaign }
+    : { campaign: scope.whereCampaign };
 
   const [current, prior] = await Promise.all([
     db.dailyKpi.aggregate({
-      where: {
-        campaign: { accountId: { in: accountIds } },
-        date: { gte: currentStart },
-      },
+      where: { ...baseFilter, date: { gte: currentStart } },
       _sum: {
         impressions: true,
         clicks: true,
@@ -134,10 +161,7 @@ export async function getKpiSummary(args: {
       },
     }),
     db.dailyKpi.aggregate({
-      where: {
-        campaign: { accountId: { in: accountIds } },
-        date: { gte: priorStart, lt: priorEnd },
-      },
+      where: { ...baseFilter, date: { gte: priorStart, lt: priorEnd } },
       _sum: {
         impressions: true,
         clicks: true,
@@ -150,7 +174,7 @@ export async function getKpiSummary(args: {
   return {
     current: toWindowMetrics(current._sum),
     prior: toWindowMetrics(prior._sum),
-    accountsInScope: accountIds.length,
+    accountsInScope: scope.accountIds.length,
   };
 }
 
@@ -180,18 +204,24 @@ export async function getDailyTrend(args: {
   demoMode: boolean;
   windowDays?: number;
   accountId?: string;
+  campaignId?: string;
 }): Promise<TrendPoint[]> {
-  const { userId, demoMode, windowDays = 14, accountId } = args;
-  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
-  if (accountIds.length === 0) return [];
+  const { userId, demoMode, windowDays = 14, accountId, campaignId } = args;
+  const scope = await buildKpiWhere({
+    userId,
+    demoMode,
+    accountId,
+    campaignId,
+  });
+  if (!scope) return [];
 
-  const start = startOfUtcDay(windowDays - 1); // include today + N-1 days back
+  const start = startOfUtcDay(windowDays - 1);
+  const where = campaignId
+    ? { campaignId, campaign: scope.whereCampaign, date: { gte: start } }
+    : { campaign: scope.whereCampaign, date: { gte: start } };
   const rows = await db.dailyKpi.groupBy({
     by: ["date"],
-    where: {
-      campaign: { accountId: { in: accountIds } },
-      date: { gte: start },
-    },
+    where,
     _sum: { clicks: true, costMicros: true },
     orderBy: { date: "asc" },
   });
@@ -366,6 +396,161 @@ export async function getAccountsList(args: {
     campaignCount: a._count.campaigns,
     recent: totals.get(a.id) ?? empty(),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns list + detail
+// ---------------------------------------------------------------------------
+export type CampaignListRow = {
+  id: string;
+  name: string;
+  channelType: ChannelType;
+  status: CampaignStatus;
+  dailyBudgetUsd: number | null;
+  biddingStrategy: string | null;
+  providerCampaignId: string | null;
+  accountId: string;
+  accountName: string;
+  demoMode: boolean;
+  createdAt: Date;
+  /** Last N-day KPI roll-up (default 7). */
+  recent: WindowMetrics;
+};
+
+export type CampaignDetail = CampaignListRow & {
+  updatedAt: Date;
+  customerId: string;
+  currencyCode: string | null;
+  yamlText: string | null;
+};
+
+/**
+ * Campaigns in scope across one or many accounts. Sorted by recent spend
+ * descending so the active campaigns rise to the top.
+ */
+export async function getCampaignsList(args: {
+  userId: string;
+  demoMode: boolean;
+  accountId?: string;
+  windowDays?: number;
+  limit?: number;
+}): Promise<CampaignListRow[]> {
+  const { userId, demoMode, accountId, windowDays = 7, limit = 50 } = args;
+  const accountIds = await accountIdsInScope({ userId, demoMode, accountId });
+  if (accountIds.length === 0) return [];
+
+  const campaigns = await db.campaign.findMany({
+    where: { accountId: { in: accountIds } },
+    include: { account: { select: { id: true, descriptiveName: true } } },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  if (campaigns.length === 0) return [];
+
+  const start = startOfUtcDay(windowDays);
+  const grouped = await db.dailyKpi.groupBy({
+    by: ["campaignId"],
+    where: {
+      campaignId: { in: campaigns.map((c) => c.id) },
+      date: { gte: start },
+    },
+    _sum: {
+      impressions: true,
+      clicks: true,
+      costMicros: true,
+      conversions: true,
+    },
+  });
+
+  const stats = new Map<string, WindowMetrics>(
+    grouped.map((g) => [
+      g.campaignId,
+      {
+        impressions: bigIntToNumber(g._sum.impressions),
+        clicks: bigIntToNumber(g._sum.clicks),
+        spendUsd: microsToUsd(g._sum.costMicros),
+        conversions: g._sum.conversions ?? 0,
+      },
+    ]),
+  );
+
+  const rows = campaigns.map((c): CampaignListRow => ({
+    id: c.id,
+    name: c.name,
+    channelType: c.channelType as ChannelType,
+    status: c.status as CampaignStatus,
+    dailyBudgetUsd: c.dailyBudgetMicros ? microsToUsd(c.dailyBudgetMicros) : null,
+    biddingStrategy: c.biddingStrategy,
+    providerCampaignId: c.providerCampaignId,
+    accountId: c.account.id,
+    accountName: c.account.descriptiveName ?? `Customer ${c.account.id.slice(0, 6)}`,
+    demoMode: c.demoMode,
+    createdAt: c.createdAt,
+    recent: stats.get(c.id) ?? empty(),
+  }));
+
+  // Sort by recent spend desc, then name asc as a tiebreaker.
+  rows.sort((a, b) =>
+    b.recent.spendUsd - a.recent.spendUsd ||
+    a.name.localeCompare(b.name),
+  );
+  return rows;
+}
+
+/**
+ * Fetch a single campaign in scope — null if not found / not visible.
+ */
+export async function getCampaignDetail(args: {
+  userId: string;
+  demoMode: boolean;
+  campaignId: string;
+}): Promise<CampaignDetail | null> {
+  const accountWhere = args.demoMode
+    ? { demoMode: true }
+    : { userId: args.userId, demoMode: false };
+
+  const campaign = await db.campaign.findFirst({
+    where: {
+      id: args.campaignId,
+      account: accountWhere,
+    },
+    include: { account: true },
+  });
+  if (!campaign) return null;
+
+  // Use the last 7d window for `recent` (matches list view), plus pull the
+  // campaign-scoped 30-day summary in the page itself via getKpiSummary.
+  const start = startOfUtcDay(7);
+  const recent = await db.dailyKpi.aggregate({
+    where: { campaignId: campaign.id, date: { gte: start } },
+    _sum: {
+      impressions: true,
+      clicks: true,
+      costMicros: true,
+      conversions: true,
+    },
+  });
+
+  return {
+    id: campaign.id,
+    name: campaign.name,
+    channelType: campaign.channelType as ChannelType,
+    status: campaign.status as CampaignStatus,
+    dailyBudgetUsd: campaign.dailyBudgetMicros
+      ? microsToUsd(campaign.dailyBudgetMicros)
+      : null,
+    biddingStrategy: campaign.biddingStrategy,
+    providerCampaignId: campaign.providerCampaignId,
+    accountId: campaign.account.id,
+    accountName: campaign.account.descriptiveName ?? `Customer ${campaign.account.customerId}`,
+    customerId: campaign.account.customerId,
+    currencyCode: campaign.account.currencyCode,
+    demoMode: campaign.demoMode,
+    createdAt: campaign.createdAt,
+    updatedAt: campaign.updatedAt,
+    yamlText: campaign.yamlText,
+    recent: toWindowMetrics(recent._sum),
+  };
 }
 
 /**
