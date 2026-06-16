@@ -6,6 +6,8 @@ import { LogoLockup } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { site } from "@/lib/site";
 
+import { MarketingMobileMenu } from "./mobile-menu";
+
 /**
  * Sticky marketing nav. Border + subtle backdrop blur fade in
  * after the user scrolls a bit — Linear/Vercel pattern.
@@ -49,18 +51,25 @@ export function MarketingHeader() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Sign in: hidden on the tightest screens (use the hamburger
+              instead) so the header doesn't crowd. md+ shows it inline. */}
           <Button
             variant="ghost"
             size="sm"
             render={<Link href="/sign-in" />}
-            className="hidden sm:inline-flex"
+            className="hidden md:inline-flex"
           >
             Sign in
           </Button>
-          <Button size="sm" render={<Link href="/sign-up" />}>
+          <Button
+            size="sm"
+            render={<Link href="/sign-up" />}
+            className="hidden sm:inline-flex"
+          >
             Get started
           </Button>
+          <MarketingMobileMenu />
         </div>
       </div>
     </motion.header>

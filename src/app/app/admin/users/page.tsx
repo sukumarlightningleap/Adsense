@@ -48,7 +48,76 @@ export default async function AdminUsersPage() {
         <div className="text-[12px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
           Existing users · {users.length}
         </div>
-        <div className="mt-4 overflow-hidden rounded-2xl border border-border">
+
+        {/* Mobile — card list */}
+        <ul className="mt-4 space-y-3 md:hidden">
+          {users.map((u) => {
+            const isSelf = u.id === callerId;
+            return (
+              <li
+                key={u.id}
+                className="rounded-2xl border border-border bg-card p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[14.5px] font-semibold">
+                      {u.name}{" "}
+                      {isSelf && (
+                        <span className="ml-1 font-mono text-[10px] uppercase text-muted-foreground">
+                          (you)
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-[12px] text-muted-foreground">
+                      {u.email}
+                    </div>
+                  </div>
+                  <RoleBadge role={u.role} />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Created
+                    </div>
+                    <div className="mt-0.5 text-foreground/80">
+                      {formatDate(u.createdAt)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Last login
+                    </div>
+                    <div className="mt-0.5 text-foreground/80">
+                      {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : "Never"}
+                    </div>
+                  </div>
+                </div>
+                {!isSelf && (
+                  <form
+                    action={toggleUserActiveAction}
+                    className="mt-3 border-t border-border pt-3"
+                  >
+                    <input type="hidden" name="userId" value={u.id} />
+                    <button
+                      type="submit"
+                      className={cn(
+                        "w-full rounded-md border px-2.5 py-2 text-[12.5px] font-medium transition-colors",
+                        u.isActive
+                          ? "border-border bg-background hover:bg-muted"
+                          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20",
+                      )}
+                    >
+                      {u.isActive ? "Deactivate" : "Activate"}
+                    </button>
+                  </form>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Desktop — table */}
+        <div className="mt-4 hidden overflow-hidden rounded-2xl border border-border md:block">
           <div className="grid grid-cols-12 gap-4 border-b border-border bg-muted/30 px-5 py-3 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
             <div className="col-span-4">User</div>
             <div className="col-span-2">Role</div>

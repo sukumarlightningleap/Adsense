@@ -5,7 +5,6 @@ import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { getEffectiveDemoMode } from "@/lib/demo/cookie";
 import { getAccountsList, type AccountListRow } from "@/lib/dashboard/kpis";
-import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "Accounts",
@@ -70,61 +69,134 @@ function AccountsTable({
   demoMode: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="grid grid-cols-12 gap-3 border-b border-border bg-muted/30 px-5 py-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-        <div className="col-span-4">Account</div>
-        <div className="col-span-2">Customer ID</div>
-        <div className="col-span-1">GA4</div>
-        <div className="col-span-1 text-right">Campaigns</div>
-        <div className="col-span-1 text-right">Clicks 7d</div>
-        <div className="col-span-2 text-right">Spend 7d</div>
-        <div className="col-span-1 text-right">—</div>
-      </div>
-      {rows.map((a) => (
-        <div
-          key={a.id}
-          className="grid grid-cols-12 items-center gap-3 border-b border-border px-5 py-4 last:border-b-0 transition-colors hover:bg-muted/30"
-        >
-          <div className="col-span-4 min-w-0">
+    <>
+      {/* Mobile — card list */}
+      <ul className="space-y-3 md:hidden">
+        {rows.map((a) => (
+          <li key={a.id}>
             <Link
               href={`/app/accounts/${a.id}`}
-              className="block truncate text-[14px] font-medium hover:text-brand"
+              className="block rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/30"
             >
-              {a.descriptiveName}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[15px] font-semibold">
+                    {a.descriptiveName}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[12px] text-muted-foreground">
+                    {formatCustomerId(a.customerId)}
+                  </div>
+                </div>
+                {demoMode && (
+                  <span className="shrink-0 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-violet-700">
+                    DEMO
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-[12px]">
+                <Stat label="Campaigns" value={String(a.campaignCount)} />
+                <Stat
+                  label="GA4"
+                  value={
+                    a.ga4Linked === true
+                      ? "Linked"
+                      : a.ga4Linked === false
+                        ? "Not linked"
+                        : "—"
+                  }
+                />
+                <Stat label="Clicks 7d" value={compact(a.recent.clicks)} />
+                <Stat
+                  label="Spend 7d"
+                  value={`$${a.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
+                  emphasize
+                />
+              </div>
             </Link>
-            <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-              {a.currencyCode ?? "—"} · {a.timeZone ?? "—"}
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop — table */}
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="grid grid-cols-12 gap-3 border-b border-border bg-muted/30 px-5 py-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          <div className="col-span-4">Account</div>
+          <div className="col-span-2">Customer ID</div>
+          <div className="col-span-1">GA4</div>
+          <div className="col-span-1 text-right">Campaigns</div>
+          <div className="col-span-1 text-right">Clicks 7d</div>
+          <div className="col-span-2 text-right">Spend 7d</div>
+          <div className="col-span-1 text-right">—</div>
+        </div>
+        {rows.map((a) => (
+          <div
+            key={a.id}
+            className="grid grid-cols-12 items-center gap-3 border-b border-border px-5 py-4 last:border-b-0 transition-colors hover:bg-muted/30"
+          >
+            <div className="col-span-4 min-w-0">
+              <Link
+                href={`/app/accounts/${a.id}`}
+                className="block truncate text-[14px] font-medium hover:text-brand"
+              >
+                {a.descriptiveName}
+              </Link>
+              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {a.currencyCode ?? "—"} · {a.timeZone ?? "—"}
+              </div>
+            </div>
+            <div className="col-span-2 font-mono text-[12px] text-muted-foreground">
+              {formatCustomerId(a.customerId)}
+              {a.loginCustomerId && (
+                <div className="text-[10px] text-muted-foreground/70">
+                  via MCC {formatCustomerId(a.loginCustomerId)}
+                </div>
+              )}
+            </div>
+            <div className="col-span-1">
+              <Ga4Badge linked={a.ga4Linked} />
+            </div>
+            <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
+              {a.campaignCount}
+            </div>
+            <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
+              {compact(a.recent.clicks)}
+            </div>
+            <div className="col-span-2 text-right font-mono text-[12px] font-medium tabular-nums">
+              ${a.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            </div>
+            <div className="col-span-1 flex items-center justify-end gap-2">
+              {demoMode && (
+                <span className="rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-violet-700">
+                  DEMO
+                </span>
+              )}
             </div>
           </div>
-          <div className="col-span-2 font-mono text-[12px] text-muted-foreground">
-            {formatCustomerId(a.customerId)}
-            {a.loginCustomerId && (
-              <div className="text-[10px] text-muted-foreground/70">
-                via MCC {formatCustomerId(a.loginCustomerId)}
-              </div>
-            )}
-          </div>
-          <div className="col-span-1">
-            <Ga4Badge linked={a.ga4Linked} />
-          </div>
-          <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
-            {a.campaignCount}
-          </div>
-          <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
-            {compact(a.recent.clicks)}
-          </div>
-          <div className="col-span-2 text-right font-mono text-[12px] font-medium tabular-nums">
-            ${a.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          </div>
-          <div className="col-span-1 flex items-center justify-end gap-2">
-            {demoMode && (
-              <span className="rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-violet-700">
-                DEMO
-              </span>
-            )}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={`mt-0.5 font-mono tabular-nums ${emphasize ? "font-medium text-foreground" : "text-foreground/80"}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }

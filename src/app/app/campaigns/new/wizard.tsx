@@ -273,12 +273,15 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
 
 function Progress({ current }: { current: number }) {
   return (
-    <ol className="flex items-center gap-2">
+    <ol className="flex items-center gap-1 sm:gap-2">
       {STEPS.map((s, i) => {
         const state =
           i < current ? "done" : i === current ? "active" : "todo";
         return (
-          <li key={s.title} className="flex flex-1 items-center gap-2">
+          <li
+            key={s.title}
+            className="flex flex-1 items-center gap-1.5 sm:gap-2"
+          >
             <span
               className={cn(
                 "grid size-6 shrink-0 place-items-center rounded-full border font-mono text-[10px] font-semibold",
@@ -292,9 +295,10 @@ function Progress({ current }: { current: number }) {
             >
               {i + 1}
             </span>
+            {/* Labels hidden on small screens to keep the bar uncluttered */}
             <span
               className={cn(
-                "truncate text-[12px] font-medium",
+                "hidden truncate text-[12px] font-medium sm:inline",
                 state === "active"
                   ? "text-foreground"
                   : "text-muted-foreground",

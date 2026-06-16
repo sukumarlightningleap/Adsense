@@ -48,7 +48,12 @@ export default async function AppLayout({
         demoMode={demoMode}
         setDemoModeAction={setDemoModeAction}
       />
-      <MobileTopBar signOutAction={handleSignOut} />
+      <MobileTopBar
+        user={sidebarUser}
+        signOutAction={handleSignOut}
+        demoMode={demoMode}
+        setDemoModeAction={setDemoModeAction}
+      />
       <main className="flex-1 lg:pl-60">{children}</main>
     </div>
   );

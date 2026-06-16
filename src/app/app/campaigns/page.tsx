@@ -93,53 +93,131 @@ export default async function CampaignsPage({
 
 function CampaignsTable({ rows }: { rows: CampaignListRow[] }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="grid grid-cols-12 gap-3 border-b border-border bg-muted/30 px-5 py-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-        <div className="col-span-4">Campaign</div>
-        <div className="col-span-2">Account</div>
-        <div className="col-span-1">Channel</div>
-        <div className="col-span-1">Status</div>
-        <div className="col-span-1 text-right">Budget/day</div>
-        <div className="col-span-1 text-right">Clicks 7d</div>
-        <div className="col-span-2 text-right">Spend 7d</div>
-      </div>
+    <>
+      {/* Mobile — card list */}
+      <ul className="space-y-3 md:hidden">
+        {rows.map((c) => (
+          <li key={c.id}>
+            <Link
+              href={`/app/campaigns/${c.id}`}
+              className="block rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/30"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-semibold">
+                    {c.name}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+                    {c.accountName}
+                  </div>
+                </div>
+                <StatusBadge status={c.status} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  {c.channelType}
+                </span>
+                {c.providerCampaignId && (
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    ID {c.providerCampaignId}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-3 text-[12px]">
+                <Stat
+                  label="Budget/day"
+                  value={
+                    c.dailyBudgetUsd != null
+                      ? `$${c.dailyBudgetUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                      : "—"
+                  }
+                />
+                <Stat
+                  label="Clicks 7d"
+                  value={compact(c.recent.clicks)}
+                />
+                <Stat
+                  label="Spend 7d"
+                  value={`$${c.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
+                  emphasize
+                />
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
 
-      {rows.map((c) => (
-        <Link
-          key={c.id}
-          href={`/app/campaigns/${c.id}`}
-          className="grid grid-cols-12 items-center gap-3 border-b border-border px-5 py-3.5 last:border-b-0 transition-colors hover:bg-muted/30"
-        >
-          <div className="col-span-4 min-w-0">
-            <div className="truncate text-[13.5px] font-medium">{c.name}</div>
-            <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-              {c.providerCampaignId ?? "—"}
+      {/* Desktop — table */}
+      <div className="hidden overflow-hidden rounded-2xl border border-border bg-card md:block">
+        <div className="grid grid-cols-12 gap-3 border-b border-border bg-muted/30 px-5 py-3 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          <div className="col-span-4">Campaign</div>
+          <div className="col-span-2">Account</div>
+          <div className="col-span-1">Channel</div>
+          <div className="col-span-1">Status</div>
+          <div className="col-span-1 text-right">Budget/day</div>
+          <div className="col-span-1 text-right">Clicks 7d</div>
+          <div className="col-span-2 text-right">Spend 7d</div>
+        </div>
+        {rows.map((c) => (
+          <Link
+            key={c.id}
+            href={`/app/campaigns/${c.id}`}
+            className="grid grid-cols-12 items-center gap-3 border-b border-border px-5 py-3.5 last:border-b-0 transition-colors hover:bg-muted/30"
+          >
+            <div className="col-span-4 min-w-0">
+              <div className="truncate text-[13.5px] font-medium">{c.name}</div>
+              <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                {c.providerCampaignId ?? "—"}
+              </div>
             </div>
-          </div>
-          <div className="col-span-2 min-w-0 truncate text-[12px] text-muted-foreground">
-            {c.accountName}
-          </div>
-          <div className="col-span-1">
-            <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
-              {c.channelType}
-            </span>
-          </div>
-          <div className="col-span-1">
-            <StatusBadge status={c.status} />
-          </div>
-          <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
-            {c.dailyBudgetUsd != null
-              ? `$${c.dailyBudgetUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-              : "—"}
-          </div>
-          <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
-            {compact(c.recent.clicks)}
-          </div>
-          <div className="col-span-2 text-right font-mono text-[12px] font-medium tabular-nums">
-            ${c.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-          </div>
-        </Link>
-      ))}
+            <div className="col-span-2 min-w-0 truncate text-[12px] text-muted-foreground">
+              {c.accountName}
+            </div>
+            <div className="col-span-1">
+              <span className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
+                {c.channelType}
+              </span>
+            </div>
+            <div className="col-span-1">
+              <StatusBadge status={c.status} />
+            </div>
+            <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
+              {c.dailyBudgetUsd != null
+                ? `$${c.dailyBudgetUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                : "—"}
+            </div>
+            <div className="col-span-1 text-right font-mono text-[12px] tabular-nums">
+              {compact(c.recent.clicks)}
+            </div>
+            <div className="col-span-2 text-right font-mono text-[12px] font-medium tabular-nums">
+              ${c.recent.spendUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={`mt-0.5 font-mono tabular-nums ${emphasize ? "font-medium text-foreground" : "text-foreground/80"}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
