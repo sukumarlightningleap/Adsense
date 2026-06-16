@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { FullDraftSchema, type CampaignDraft } from "@/lib/wizard/schema";
+import { buildLaunchPayload } from "@/lib/wizard/payload-builder";
 import { buildCampaignYaml } from "@/lib/wizard/yaml-builder";
 
 export type SaveCampaignResult =
@@ -62,6 +63,7 @@ export async function saveCampaignAction(
   }
 
   const yamlText = buildCampaignYaml(validated);
+  const payload = buildLaunchPayload(validated);
 
   const campaign = await db.campaign.create({
     data: {
@@ -74,6 +76,7 @@ export async function saveCampaignAction(
       ),
       biddingStrategy: validated.budget.biddingStrategy,
       yamlText,
+      payloadJson: payload,
       demoMode: false,
     },
   });

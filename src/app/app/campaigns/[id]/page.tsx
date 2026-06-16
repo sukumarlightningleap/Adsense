@@ -3,16 +3,21 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { auth } from "@/auth";
+import { db } from "@/lib/db";
 import { getEffectiveDemoMode } from "@/lib/demo/cookie";
 import {
   getCampaignDetail,
   getDailyTrend,
   getKpiSummary,
 } from "@/lib/dashboard/kpis";
+import { activeProfile } from "@/lib/google-ads/auth";
+import { launcherMaxDailyUsd } from "@/lib/google-ads/launcher";
 import { cn } from "@/lib/utils";
 
 import { KpiTile } from "../../_components/kpi-tile";
 import { TrendChart } from "../../_components/trend-chart";
+
+import { LaunchCard } from "./launch-card";
 
 export async function generateMetadata({
   params,
@@ -202,6 +207,18 @@ export default async function CampaignDetailPage({
         </div>
       </section>
 
+      {/* Launch to Google — live campaigns only; demo campaigns can't launch. */}
+      {!campaign.demoMode && campaign.channelType === "SEARCH" && (
+        <section className="mt-10">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+            Launcher
+          </div>
+          <div className="mt-3">
+            <LaunchCardWrapper campaignId={campaign.id} dailyUsd={campaign.dailyBudgetUsd} />
+          </div>
+        </section>
+      )}
+
       {/* Sub-resources placeholder */}
       <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <SubCard
@@ -233,6 +250,44 @@ export default async function CampaignDetailPage({
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Wrapper that fetches launch-state from DB and decides what to render.
+ * Kept inline so the page reads top-to-bottom.
+ */
+async function LaunchCardWrapper({
+  campaignId,
+  dailyUsd,
+}: {
+  campaignId: string;
+  dailyUsd: number | null;
+}) {
+  const c = await db.campaign.findUnique({
+    where: { id: campaignId },
+    select: {
+      providerCampaignId: true,
+      launchedAt: true,
+      launchedProfile: true,
+    },
+  });
+  return (
+    <LaunchCard
+      campaignId={campaignId}
+      profile={activeProfile()}
+      maxDailyUsd={launcherMaxDailyUsd()}
+      dailyUsd={dailyUsd}
+      alreadyLaunched={
+        c?.providerCampaignId
+          ? {
+              providerCampaignId: c.providerCampaignId,
+              profile: (c.launchedProfile as "test" | "prod" | null) ?? null,
+              launchedAt: c.launchedAt,
+            }
+          : null
+      }
+    />
   );
 }
 

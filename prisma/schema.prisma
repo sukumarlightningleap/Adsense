@@ -126,7 +126,12 @@ model Campaign {
   status              CampaignStatus @default(PAUSED)
   dailyBudgetMicros   BigInt?        @map("daily_budget_micros")
   biddingStrategy     String?        @map("bidding_strategy") // MAXIMIZE_CLICKS / TARGET_CPA / MAXIMIZE_CONVERSIONS
-  yamlText            String?        @map("yaml_text")        // last YAML payload built
+  yamlText            String?        @map("yaml_text")        // human-readable YAML (display)
+  payloadJson         Json?          @map("payload_json")     // structured payload (launcher reads this)
+  // Set on a successful launch — tracks which credential profile pushed
+  // this campaign so the operator knows whether it's on test or prod.
+  launchedProfile     String?        @map("launched_profile") // 'test' | 'prod' | null
+  launchedAt          DateTime?      @map("launched_at")
   demoMode            Boolean        @default(false) @map("demo_mode")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
