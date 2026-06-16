@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ImageIcon, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -26,11 +27,15 @@ export function AssetCard(props: AssetCardProps) {
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-border bg-card",
+        "group relative overflow-hidden rounded-2xl border border-border bg-card transition-shadow hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.12)]",
       )}
     >
-      {/* Thumbnail */}
-      <div className="relative aspect-square bg-muted">
+      {/* Thumbnail — entire card links to the detail page */}
+      <Link
+        href={`/app/assets/${props.id}`}
+        className="block relative aspect-square bg-muted"
+        aria-label={`Open ${props.name}`}
+      >
         {props.kind === "image" || props.kind === "logo" ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -54,7 +59,7 @@ export function AssetCard(props: AssetCardProps) {
             </span>
           )}
         </div>
-      </div>
+      </Link>
 
       {/* Meta */}
       <div className="space-y-1.5 p-3">
