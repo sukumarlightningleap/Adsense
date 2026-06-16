@@ -422,6 +422,8 @@ export type CampaignDetail = CampaignListRow & {
   customerId: string;
   currencyCode: string | null;
   yamlText: string | null;
+  /** Structured launcher payload — Phase 4+. Null for pre-Phase-4 drafts. */
+  payloadJson: unknown;
 };
 
 /**
@@ -549,6 +551,7 @@ export async function getCampaignDetail(args: {
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
     yamlText: campaign.yamlText,
+    payloadJson: campaign.payloadJson,
     recent: toWindowMetrics(recent._sum),
   };
 }

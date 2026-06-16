@@ -13,11 +13,13 @@ import {
 import { activeProfile } from "@/lib/google-ads/auth";
 import { launcherMaxDailyUsd } from "@/lib/google-ads/launcher";
 import { cn } from "@/lib/utils";
+import type { PmaxLaunchPayload } from "@/lib/wizard/payload-builder";
 
 import { KpiTile } from "../../_components/kpi-tile";
 import { TrendChart } from "../../_components/trend-chart";
 
 import { LaunchCard } from "./launch-card";
+import { PmaxSections } from "./pmax-sections";
 
 export async function generateMetadata({
   params,
@@ -208,19 +210,35 @@ export default async function CampaignDetailPage({
       </section>
 
       {/* Launch to Google — live campaigns only; demo campaigns can't launch. */}
-      {!campaign.demoMode && campaign.channelType === "SEARCH" && (
-        <section className="mt-10">
-          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            Launcher
-          </div>
-          <div className="mt-3">
-            <LaunchCardWrapper campaignId={campaign.id} dailyUsd={campaign.dailyBudgetUsd} />
-          </div>
-        </section>
+      {!campaign.demoMode &&
+        (campaign.channelType === "SEARCH" ||
+          campaign.channelType === "PMAX") && (
+          <section className="mt-10">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              Launcher
+            </div>
+            <div className="mt-3">
+              <LaunchCardWrapper
+                campaignId={campaign.id}
+                dailyUsd={campaign.dailyBudgetUsd}
+              />
+            </div>
+          </section>
+        )}
+
+      {/* PMAX-specific sub-resources: asset group + ad copy +
+          conversion-tracking notice. For SEARCH we keep the placeholder
+          tiles below. */}
+      {campaign.channelType === "PMAX" && campaign.payloadJson != null && (
+        <PmaxSections
+          payload={campaign.payloadJson as PmaxLaunchPayload}
+          alreadyLaunched={!!campaign.providerCampaignId}
+        />
       )}
 
-      {/* Sub-resources placeholder */}
-      <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+      {/* SEARCH sub-resources placeholder */}
+      {campaign.channelType === "SEARCH" && (
+        <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <SubCard
           title="Ad groups"
           count="—"
@@ -236,7 +254,8 @@ export default async function CampaignDetailPage({
           count="—"
           body="Positive and negative keywords surface in Phase 3 along with the keyword theme editor."
         />
-      </section>
+        </section>
+      )}
 
       {/* YAML payload (if any) */}
       {campaign.yamlText && (
