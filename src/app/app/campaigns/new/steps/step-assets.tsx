@@ -1,0 +1,341 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { CheckCircle2, ImagePlus, Sparkles, X } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import type { CampaignDraft } from "@/lib/wizard/schema";
+
+export type LibraryAsset = {
+  id: string;
+  name: string | null;
+  kind: "image" | "logo" | "pdf" | "video";
+  width: number | null;
+  height: number | null;
+  mime: string;
+};
+
+type Props = {
+  draft: CampaignDraft;
+  onChange: (next: CampaignDraft) => void;
+  library: LibraryAsset[];
+};
+
+type RoleKey =
+  | "logoAssetId"
+  | "landscapeLogoAssetId"
+  | "marketingImageAssetId"
+  | "squareMarketingImageAssetId"
+  | "portraitMarketingImageAssetId";
+
+type RoleSpec = {
+  key: RoleKey;
+  title: string;
+  description: string;
+  aspect: string;
+  /** Which library kind values are valid for this role. */
+  kindFilter: ("image" | "logo")[];
+  required: boolean;
+};
+
+const ROLES: RoleSpec[] = [
+  {
+    key: "logoAssetId",
+    title: "Logo",
+    description: "Used in every PMAX placement. Square 1:1.",
+    aspect: "1:1",
+    kindFilter: ["logo"],
+    required: true,
+  },
+  {
+    key: "marketingImageAssetId",
+    title: "Marketing image",
+    description: "Landscape hero. Search + Display + Discover.",
+    aspect: "1.91:1",
+    kindFilter: ["image"],
+    required: true,
+  },
+  {
+    key: "squareMarketingImageAssetId",
+    title: "Square marketing image",
+    description: "Feeds, mobile, grid placements.",
+    aspect: "1:1",
+    kindFilter: ["image"],
+    required: true,
+  },
+  {
+    key: "landscapeLogoAssetId",
+    title: "Landscape logo",
+    description: "Optional. Improves placements where 4:1 fits.",
+    aspect: "4:1",
+    kindFilter: ["logo"],
+    required: false,
+  },
+  {
+    key: "portraitMarketingImageAssetId",
+    title: "Portrait marketing image",
+    description: "Optional. Mobile stories + portrait placements.",
+    aspect: "4:5",
+    kindFilter: ["image"],
+    required: false,
+  },
+];
+
+export function StepAssets({ draft, onChange, library }: Props) {
+  const picks = draft.pmaxAssets ?? {};
+
+  function update(patch: Partial<NonNullable<CampaignDraft["pmaxAssets"]>>) {
+    onChange({
+      ...draft,
+      pmaxAssets: { ...draft.pmaxAssets, ...patch },
+    });
+  }
+
+  if (library.length === 0) {
+    return <EmptyLibrary />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-muted-foreground">
+        Pick the source image for each role. The launcher auto-resolves
+        the right Google Ads size from your sharp-generated variants — you
+        don&apos;t need to upload separate crops.
+      </p>
+
+      {ROLES.map((role) => (
+        <RoleSection
+          key={role.key}
+          role={role}
+          library={library}
+          currentAssetId={picks[role.key]}
+          onPick={(id) => update({ [role.key]: id ?? undefined })}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RoleSection({
+  role,
+  library,
+  currentAssetId,
+  onPick,
+}: {
+  role: RoleSpec;
+  library: LibraryAsset[];
+  currentAssetId: string | undefined;
+  onPick: (assetId: string | undefined) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const matching = library.filter((a) =>
+    role.kindFilter.includes(a.kind as "image" | "logo"),
+  );
+  const current = library.find((a) => a.id === currentAssetId);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-[14.5px] font-semibold">{role.title}</h3>
+            {role.required ? (
+              <span className="rounded-md border border-destructive/30 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-destructive">
+                Required
+              </span>
+            ) : (
+              <span className="rounded-md border border-border bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Optional
+              </span>
+            )}
+            <code className="font-mono text-[10.5px] text-muted-foreground">
+              {role.aspect}
+            </code>
+          </div>
+          <p className="mt-1 text-[12.5px] text-muted-foreground">
+            {role.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Current pick / picker */}
+      <div className="mt-4">
+        {current ? (
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-background p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/assets/${current.id}/bytes`}
+              alt={current.name ?? "Asset"}
+              className="size-14 rounded-md border border-border object-contain"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-medium">
+                {current.name ?? "Untitled"}
+              </div>
+              <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                {current.width && current.height
+                  ? `${current.width}×${current.height} · `
+                  : ""}
+                {current.mime}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPicking((v) => !v)}
+                className="rounded-md border border-border bg-background px-2.5 py-1 text-[12px] font-medium hover:bg-muted"
+              >
+                Change
+              </button>
+              {!role.required && (
+                <button
+                  type="button"
+                  onClick={() => onPick(undefined)}
+                  aria-label="Clear"
+                  className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPicking(true)}
+            className="flex w-full items-center gap-2.5 rounded-lg border border-dashed border-border bg-background px-4 py-3 text-[13px] font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-muted/30"
+          >
+            <ImagePlus className="size-4" />
+            Pick a {role.title.toLowerCase()}
+            {matching.length > 0 && (
+              <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+                {matching.length} available
+              </span>
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Picker grid */}
+      <AnimatePresence initial={false}>
+        {picking && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Library · {matching.length} match
+                  {matching.length === 1 ? "" : "es"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPicking(false)}
+                  className="rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                  aria-label="Close picker"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+
+              {matching.length === 0 ? (
+                <EmptyMatchHint role={role} />
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                  {matching.map((a) => {
+                    const active = currentAssetId === a.id;
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => {
+                          onPick(a.id);
+                          setPicking(false);
+                        }}
+                        className={cn(
+                          "group relative overflow-hidden rounded-md border bg-background transition-colors",
+                          active
+                            ? "border-foreground ring-2 ring-foreground/30"
+                            : "border-border hover:border-foreground/40",
+                        )}
+                        title={a.name ?? "Untitled"}
+                      >
+                        <div className="aspect-square bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/assets/${a.id}/bytes`}
+                            alt={a.name ?? "Asset"}
+                            className="size-full object-contain p-2"
+                          />
+                        </div>
+                        <div className="truncate px-2 py-1 text-left text-[10.5px]">
+                          {a.name ?? "Untitled"}
+                        </div>
+                        {active && (
+                          <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-foreground text-background">
+                            <CheckCircle2 className="size-3" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function EmptyMatchHint({ role }: { role: RoleSpec }) {
+  const hint =
+    role.kindFilter[0] === "logo"
+      ? "No logos in your library yet."
+      : "No images in your library yet.";
+  return (
+    <div className="rounded-md border border-dashed border-border bg-background/60 px-3 py-4 text-center text-[12.5px] text-muted-foreground">
+      <div>{hint}</div>
+      <Link
+        href="/app/assets"
+        className="mt-1 inline-flex items-center gap-1 text-[12px] font-medium text-foreground hover:underline"
+      >
+        Upload one →
+      </Link>
+    </div>
+  );
+}
+
+function EmptyLibrary() {
+  return (
+    <div className="rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center md:p-14">
+      <div className="mx-auto inline-flex size-12 items-center justify-center rounded-2xl bg-foreground text-background">
+        <Sparkles className="size-5" />
+      </div>
+      <h2 className="mt-6 text-2xl font-semibold tracking-[-0.02em]">
+        No assets in your library
+      </h2>
+      <p className="mx-auto mt-3 max-w-md text-[14px] leading-6 text-muted-foreground">
+        PMAX needs at least a logo, a marketing image, and a square marketing
+        image. Upload them from the asset library — variants generate
+        automatically.
+      </p>
+      <div className="mt-6 flex justify-center">
+        <Link
+          href="/app/assets"
+          className="inline-flex h-10 items-center gap-1.5 rounded-md bg-foreground px-4 text-[13px] font-medium text-background transition-colors hover:bg-foreground/80"
+        >
+          <ImagePlus className="size-4" />
+          Upload assets
+        </Link>
+      </div>
+    </div>
+  );
+}

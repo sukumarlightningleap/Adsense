@@ -12,7 +12,9 @@ import {
   Step2Schema,
   Step3Schema,
   Step4Schema,
+  Step5AssetsSchema,
   type CampaignDraft,
+  type Channel,
 } from "@/lib/wizard/schema";
 
 import { saveCampaignAction } from "./actions";
@@ -20,6 +22,7 @@ import { StepBook } from "./steps/step-book";
 import { StepAudience } from "./steps/step-audience";
 import { StepCopy } from "./steps/step-copy";
 import { StepBudget } from "./steps/step-budget";
+import { StepAssets, type LibraryAsset } from "./steps/step-assets";
 import { StepReview } from "./steps/step-review";
 
 export type AccountOption = {
@@ -29,34 +32,60 @@ export type AccountOption = {
   currencyCode: string;
 };
 
-const LS_KEY = "adsense-campaign-wizard-draft-v1";
+const LS_KEY = "adsense-campaign-wizard-draft-v2"; // bumped — schema changed
 
-const STEPS = [
-  { title: "Product", subtitle: "What you're advertising" },
-  { title: "Audience", subtitle: "Where and to whom" },
-  { title: "Ad copy", subtitle: "Headlines, descriptions, keywords" },
-  { title: "Budget", subtitle: "Spend + bidding" },
-  { title: "Review", subtitle: "Preview + save" },
-] as const;
+type StepDef = {
+  /** Stable string ID so localStorage / validateStep don't depend on index. */
+  id: "product" | "audience" | "copy" | "budget" | "assets" | "review";
+  title: string;
+  subtitle: string;
+};
+
+const SEARCH_STEPS: StepDef[] = [
+  { id: "product", title: "Product", subtitle: "Channel + product details" },
+  { id: "audience", title: "Audience", subtitle: "Where and to whom" },
+  { id: "copy", title: "Ad copy", subtitle: "Headlines, descriptions, keywords" },
+  { id: "budget", title: "Budget", subtitle: "Spend + bidding" },
+  { id: "review", title: "Review", subtitle: "Preview + save" },
+];
+
+const PMAX_STEPS: StepDef[] = [
+  { id: "product", title: "Product", subtitle: "Channel + product details" },
+  { id: "audience", title: "Audience", subtitle: "Where and to whom" },
+  { id: "copy", title: "Ad copy", subtitle: "Headlines, descriptions, business name" },
+  { id: "budget", title: "Budget", subtitle: "Spend + bidding" },
+  { id: "assets", title: "Assets", subtitle: "Bind library images to PMAX roles" },
+  { id: "review", title: "Review", subtitle: "Preview + save" },
+];
+
+function stepsFor(channel: Channel): StepDef[] {
+  return channel === "PMAX" ? PMAX_STEPS : SEARCH_STEPS;
+}
 
 type ValidationResult = { ok: true } | { ok: false; message: string };
 
-function validateStep(step: number, draft: CampaignDraft): ValidationResult {
+function validateStep(
+  stepId: StepDef["id"],
+  draft: CampaignDraft,
+): ValidationResult {
   let parsed;
-  switch (step) {
-    case 0:
+  switch (stepId) {
+    case "product":
       parsed = Step1Schema.safeParse(draft);
       break;
-    case 1:
+    case "audience":
       parsed = Step2Schema.safeParse(draft);
       break;
-    case 2:
+    case "copy":
       parsed = Step3Schema.safeParse(draft);
       break;
-    case 3:
+    case "budget":
       parsed = Step4Schema.safeParse(draft);
       break;
-    default:
+    case "assets":
+      parsed = Step5AssetsSchema.safeParse(draft);
+      break;
+    case "review":
       return { ok: true };
   }
   if (parsed.success) return { ok: true };
@@ -67,7 +96,13 @@ function validateStep(step: number, draft: CampaignDraft): ValidationResult {
   };
 }
 
-export function Wizard({ accounts }: { accounts: AccountOption[] }) {
+export function Wizard({
+  accounts,
+  library,
+}: {
+  accounts: AccountOption[];
+  library: LibraryAsset[];
+}) {
   const [draft, setDraft] = useState<CampaignDraft>(() => {
     const start = emptyDraft();
     if (accounts.length > 0) start.accountId = accounts[0]!.id;
@@ -77,6 +112,11 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
   const [stepError, setStepError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const steps = stepsFor(draft.channel);
+  // Clamp step on channel change (SEARCH has 5 steps, PMAX has 6).
+  const safeStep = Math.min(step, steps.length - 1);
+  const currentStepDef = steps[safeStep]!;
 
   // ---- localStorage backup ---------------------------------------------
   useEffect(() => {
@@ -95,35 +135,37 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ step, draft }));
+      localStorage.setItem(LS_KEY, JSON.stringify({ step: safeStep, draft }));
     } catch {
       /* quota — silent */
     }
-  }, [step, draft]);
+  }, [safeStep, draft]);
 
   // ---- navigation ------------------------------------------------------
   function goNext() {
-    const validation = validateStep(step, draft);
+    const validation = validateStep(currentStepDef.id, draft);
     if (!validation.ok) {
       setStepError(validation.message);
       return;
     }
     setStepError(null);
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setStep(Math.min(safeStep + 1, steps.length - 1));
   }
 
   function goBack() {
     setStepError(null);
-    setStep((s) => Math.max(s - 1, 0));
+    setStep(Math.max(safeStep - 1, 0));
   }
 
   function handleSubmit() {
     setSubmitError(null);
-    // Final pre-submit validation (each per-step schema).
-    for (let i = 0; i < 4; i++) {
-      const v = validateStep(i, draft);
+    // Final pre-submit validation across every step EXCEPT review.
+    for (const s of steps) {
+      if (s.id === "review") continue;
+      const v = validateStep(s.id, draft);
       if (!v.ok) {
-        setStep(i);
+        const idx = steps.findIndex((x) => x.id === s.id);
+        setStep(idx);
         setStepError(v.message);
         return;
       }
@@ -135,12 +177,8 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
           setSubmitError(result.error);
           return;
         }
-        // Success: clear localStorage. The server action redirects, so
-        // we won't reach the next line in practice.
         localStorage.removeItem(LS_KEY);
       } catch (e) {
-        // Next's redirect() throws — that's not a real error.
-        // Other errors get surfaced.
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.includes("NEXT_REDIRECT")) return;
         setSubmitError(msg);
@@ -165,23 +203,23 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
     setSubmitError(null);
   }
 
+  const isLast = safeStep === steps.length - 1;
+
   return (
     <div>
-      {/* Progress bar */}
-      <Progress current={step} />
+      <Progress current={safeStep} steps={steps} />
 
-      {/* Step body */}
       <div className="mt-8 rounded-2xl border border-border bg-card p-6 md:p-8">
         <div className="mb-6 flex items-baseline justify-between gap-3">
           <div>
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-              Step {step + 1} of {STEPS.length}
+              Step {safeStep + 1} of {steps.length} · {draft.channel}
             </div>
             <h2 className="mt-1 text-xl font-semibold tracking-tight md:text-2xl">
-              {STEPS[step]!.title}
+              {currentStepDef.title}
             </h2>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {STEPS[step]!.subtitle}
+              {currentStepDef.subtitle}
             </p>
           </div>
           <button
@@ -195,23 +233,36 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={step}
+            key={`${draft.channel}-${currentStepDef.id}`}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            {step === 0 && (
+            {currentStepDef.id === "product" && (
               <StepBook
                 accounts={accounts}
                 draft={draft}
                 onChange={setDraft}
               />
             )}
-            {step === 1 && <StepAudience draft={draft} onChange={setDraft} />}
-            {step === 2 && <StepCopy draft={draft} onChange={setDraft} />}
-            {step === 3 && <StepBudget draft={draft} onChange={setDraft} />}
-            {step === 4 && (
+            {currentStepDef.id === "audience" && (
+              <StepAudience draft={draft} onChange={setDraft} />
+            )}
+            {currentStepDef.id === "copy" && (
+              <StepCopy draft={draft} onChange={setDraft} />
+            )}
+            {currentStepDef.id === "budget" && (
+              <StepBudget draft={draft} onChange={setDraft} />
+            )}
+            {currentStepDef.id === "assets" && (
+              <StepAssets
+                draft={draft}
+                onChange={setDraft}
+                library={library}
+              />
+            )}
+            {currentStepDef.id === "review" && (
               <StepReview
                 accounts={accounts}
                 draft={draft}
@@ -222,7 +273,6 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Step-validation error */}
         {stepError && (
           <motion.div
             initial={{ opacity: 0, y: -4 }}
@@ -234,18 +284,17 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
           </motion.div>
         )}
 
-        {/* Nav */}
         <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
           <Button
             type="button"
             variant="ghost"
             onClick={goBack}
-            disabled={step === 0 || pending}
+            disabled={safeStep === 0 || pending}
           >
             <ArrowLeft />
             Back
           </Button>
-          {step < STEPS.length - 1 ? (
+          {!isLast ? (
             <Button type="button" onClick={goNext} disabled={pending}>
               Continue
               <ArrowRight />
@@ -271,15 +320,21 @@ export function Wizard({ accounts }: { accounts: AccountOption[] }) {
   );
 }
 
-function Progress({ current }: { current: number }) {
+function Progress({
+  current,
+  steps,
+}: {
+  current: number;
+  steps: StepDef[];
+}) {
   return (
     <ol className="flex items-center gap-1 sm:gap-2">
-      {STEPS.map((s, i) => {
+      {steps.map((s, i) => {
         const state =
           i < current ? "done" : i === current ? "active" : "todo";
         return (
           <li
-            key={s.title}
+            key={s.id}
             className="flex flex-1 items-center gap-1.5 sm:gap-2"
           >
             <span
@@ -295,7 +350,6 @@ function Progress({ current }: { current: number }) {
             >
               {i + 1}
             </span>
-            {/* Labels hidden on small screens to keep the bar uncluttered */}
             <span
               className={cn(
                 "hidden truncate text-[12px] font-medium sm:inline",
@@ -306,7 +360,7 @@ function Progress({ current }: { current: number }) {
             >
               {s.title}
             </span>
-            {i < STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <span
                 className={cn(
                   "h-px flex-1 transition-colors",

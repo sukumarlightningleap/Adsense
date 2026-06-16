@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 
+import type { LibraryAsset } from "./steps/step-assets";
 import { Wizard } from "./wizard";
 
 export const metadata = {
@@ -22,16 +23,46 @@ export default async function NewCampaignPage() {
 
   // Live accounts only — the wizard saves real campaigns. (You can't
   // attach a real campaign to a demo account.)
-  const accounts = await db.adsAccount.findMany({
-    where: { userId: user.id, demoMode: false },
-    select: {
-      id: true,
-      descriptiveName: true,
-      customerId: true,
-      currencyCode: true,
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const [accounts, libraryRaw] = await Promise.all([
+    db.adsAccount.findMany({
+      where: { userId: user.id, demoMode: false },
+      select: {
+        id: true,
+        descriptiveName: true,
+        customerId: true,
+        currencyCode: true,
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    // Library = originals only (variants are auto-resolved by the PMAX
+    // adapter from the picked original). Filter to user's live assets.
+    db.asset.findMany({
+      where: {
+        userId: user.id,
+        demoMode: false,
+        parentAssetId: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        kind: true,
+        width: true,
+        height: true,
+        mime: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+  ]);
+
+  const library: LibraryAsset[] = libraryRaw.map((a) => ({
+    id: a.id,
+    name: a.name,
+    kind: a.kind,
+    width: a.width,
+    height: a.height,
+    mime: a.mime,
+  }));
 
   return (
     <div className="container-page py-12 md:py-16">
@@ -69,6 +100,7 @@ export default async function NewCampaignPage() {
               customerId: a.customerId,
               currencyCode: a.currencyCode ?? "USD",
             }))}
+            library={library}
           />
         )}
       </div>

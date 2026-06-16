@@ -183,24 +183,39 @@ export const PmaxBudgetSchema = z
     },
   );
 
-// PMAX assets — set on Day 3. For Day 1 we accept either: a draft without
-// assets at all (saved as PAUSED, launch disabled) OR a draft with valid
-// asset IDs.
+// PMAX assets — Day 3 wires the picker UI in the wizard. The Zod schema
+// is permissive (every field optional) at draft time, but the dedicated
+// Step5AssetsSchema below requires the 3 mandatory roles for advancing
+// to Review. The launcher's preflight enforces the same check before any
+// SDK call.
 export const PmaxAssetsSchema = z
   .object({
-    logoAssetId: z.string().min(1, "1 logo (1:1) required").optional(),
+    logoAssetId: z.string().optional(),
     landscapeLogoAssetId: z.string().optional(),
-    marketingImageAssetId: z
-      .string()
-      .min(1, "1 marketing image (1.91:1) required")
-      .optional(),
-    squareMarketingImageAssetId: z
-      .string()
-      .min(1, "1 square marketing image (1:1) required")
-      .optional(),
+    marketingImageAssetId: z.string().optional(),
+    squareMarketingImageAssetId: z.string().optional(),
     portraitMarketingImageAssetId: z.string().optional(),
   })
   .optional();
+
+/**
+ * Hard gate for the wizard's Assets step (PMAX only). Required role
+ * picks must be present before the user can hit Review.
+ */
+export const Step5AssetsSchema = z.object({
+  channel: z.literal("PMAX"),
+  pmaxAssets: z.object({
+    logoAssetId: z.string().min(1, "Pick a logo (1:1)"),
+    marketingImageAssetId: z
+      .string()
+      .min(1, "Pick a marketing image (1.91:1)"),
+    squareMarketingImageAssetId: z
+      .string()
+      .min(1, "Pick a square marketing image (1:1)"),
+    landscapeLogoAssetId: z.string().optional(),
+    portraitMarketingImageAssetId: z.string().optional(),
+  }),
+});
 
 // Combined per-step schemas for the channel-aware wizard.
 export const Step3Schema = z.object({
