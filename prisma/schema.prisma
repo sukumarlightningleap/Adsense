@@ -175,6 +175,15 @@ model Asset {
   id                   String    @id @default(cuid())
   userId               String?   @map("user_id")
   accountId            String?   @map("account_id")
+  /// FK to parent Asset for resized variants. NULL for originals.
+  parentAssetId        String?   @map("parent_asset_id")
+  /// Image dimensions. Set by the resize pipeline; NULL for non-image
+  /// assets (pdf / video) or pre-resize originals.
+  width                Int?
+  height               Int?
+  /// AssetRole that this variant fills (square_logo / landscape, etc.).
+  /// Originals have NULL; variants get the role they were sized for.
+  variantRole          AssetRole? @map("variant_role")
   name                 String?
   kind                 AssetKind
   mime                 String
@@ -186,12 +195,15 @@ model Asset {
 
   uploader      User?           @relation("AssetUploader", fields: [userId], references: [id], onDelete: SetNull)
   account       AdsAccount?     @relation("AssetAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  parent        Asset?          @relation("AssetVariants", fields: [parentAssetId], references: [id], onDelete: Cascade)
+  variants      Asset[]         @relation("AssetVariants")
   campaignLinks CampaignAsset[]
 
   @@index([userId])
   @@index([accountId])
   @@index([sha256])
   @@index([demoMode])
+  @@index([parentAssetId])
   @@map("assets")
 }
 
