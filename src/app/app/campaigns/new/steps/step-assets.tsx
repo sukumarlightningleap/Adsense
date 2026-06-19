@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle2, ImagePlus, Sparkles, X } from "lucide-react";
+import { CheckCircle2, ImagePlus, Sparkles, Wand2, X, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { CampaignDraft } from "@/lib/wizard/schema";
+
+import { generateAssetsAction } from "../actions";
+
+type PipelineMode = "fast" | "refined";
 
 export type LibraryAsset = {
   id: string;
@@ -93,27 +98,179 @@ export function StepAssets({ draft, onChange, library }: Props) {
     });
   }
 
-  if (library.length === 0) {
-    return <EmptyLibrary />;
-  }
-
   return (
     <div className="space-y-4">
-      <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-muted-foreground">
-        Pick the source image for each role. The launcher auto-resolves
-        the right Google Ads size from your sharp-generated variants — you
-        don&apos;t need to upload separate crops.
-      </p>
+      <AIAssetsBar draft={draft} onChange={onChange} />
 
-      {ROLES.map((role) => (
-        <RoleSection
-          key={role.key}
-          role={role}
-          library={library}
-          currentAssetId={picks[role.key]}
-          onPick={(id) => update({ [role.key]: id ?? undefined })}
-        />
-      ))}
+      {library.length === 0 ? (
+        <EmptyLibrary />
+      ) : (
+        <>
+          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12.5px] text-muted-foreground">
+            Pick the source image for each role. The launcher auto-resolves
+            the right Google Ads size from your sharp-generated variants —
+            you don&apos;t need to upload separate crops.
+          </p>
+
+          {ROLES.map((role) => (
+            <RoleSection
+              key={role.key}
+              role={role}
+              library={library}
+              currentAssetId={picks[role.key]}
+              onPick={(id) => update({ [role.key]: id ?? undefined })}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI generate bar — produces 4 PMAX images (marketing, square, portrait,
+// logo) via Gemini, pushes them through the same sharp pipeline uploads
+// use, and assigns the resulting IDs to the matching role slots.
+// ---------------------------------------------------------------------------
+function AIAssetsBar({
+  draft,
+  onChange,
+}: {
+  draft: CampaignDraft;
+  onChange: (next: CampaignDraft) => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<PipelineMode>("fast");
+
+  const canGenerate =
+    draft.book.title.trim().length > 0 &&
+    draft.book.description.trim().length > 0;
+
+  function onGenerate() {
+    setError(null);
+    startTransition(async () => {
+      const res = await generateAssetsAction(draft, mode);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      onChange({
+        ...draft,
+        pmaxAssets: {
+          ...draft.pmaxAssets,
+          ...res.ids,
+        },
+      });
+      // Refresh so the freshly-persisted Asset rows appear in the
+      // picker grid (library is fetched by the server component above).
+      router.refresh();
+    });
+  }
+
+  const modeCopy =
+    mode === "fast"
+      ? "Fast · 2 image calls, ~10s. One master image cropped to all 5 Google Ads sizes."
+      : "Refined · 5 image calls, ~25s. Whisk-style: subject + scene + style intermediates → fused master. Higher fidelity to your brief.";
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-gradient-to-br from-violet-500/[0.04] to-transparent p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="grid size-8 shrink-0 place-items-center rounded-md bg-foreground text-background">
+            <Sparkles className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-semibold">
+              Generate images with AI
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              {canGenerate
+                ? modeCopy
+                : "Add a title and description on step 1 first."}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModeToggle value={mode} onChange={setMode} disabled={pending} />
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={!canGenerate || pending}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="size-3.5" />
+            {pending ? "Generating…" : "Generate"}
+          </button>
+        </div>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11.5px] text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Two-pill toggle for picking the pipeline mode. Inline (no shadcn
+ * dependency) — same shape as a segmented control.
+ *
+ * TEMPORARY: this lives in the UI only while we A/B test the two
+ * pipelines. Remove the toggle + force one mode once a winner is picked.
+ */
+function ModeToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: PipelineMode;
+  onChange: (next: PipelineMode) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Pipeline mode"
+      className={cn(
+        "inline-flex rounded-md border border-border bg-background p-0.5",
+        disabled && "opacity-50",
+      )}
+    >
+      <button
+        type="button"
+        role="radio"
+        aria-checked={value === "fast"}
+        disabled={disabled}
+        onClick={() => onChange("fast")}
+        className={cn(
+          "inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+          value === "fast"
+            ? "bg-foreground text-background"
+            : "text-muted-foreground hover:bg-muted",
+        )}
+      >
+        <Zap className="size-3" />
+        Fast
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={value === "refined"}
+        disabled={disabled}
+        onClick={() => onChange("refined")}
+        className={cn(
+          "inline-flex items-center gap-1 rounded px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+          value === "refined"
+            ? "bg-foreground text-background"
+            : "text-muted-foreground hover:bg-muted",
+        )}
+      >
+        <Wand2 className="size-3" />
+        Refined
+      </button>
     </div>
   );
 }

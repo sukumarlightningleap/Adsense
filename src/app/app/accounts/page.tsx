@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, Plus } from "lucide-react";
+import { AlertTriangle, Building2, CheckCircle2, Plus } from "lucide-react";
 
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,11 @@ export const metadata = {
   title: "Accounts",
 };
 
-export default async function AccountsPage() {
+export default async function AccountsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ connected?: string; error?: string }>;
+}) {
   const session = await auth();
   const user = session!.user;
   const demoMode = await getEffectiveDemoMode(user.role);
@@ -19,12 +23,35 @@ export default async function AccountsPage() {
     demoMode,
     windowDays: 7,
   });
+  const params = await searchParams;
+  const connectedCount = params.connected
+    ? Number.parseInt(params.connected, 10)
+    : null;
+  const oauthError = params.error?.slice(0, 200) ?? null;
 
   // demo users browse only; admins + members can connect live accounts.
   const canConnect = user.role !== "demo";
 
   return (
     <div className="container-page py-12 md:py-16">
+      {/* OAuth round-trip flash banners */}
+      {connectedCount != null && connectedCount > 0 && (
+        <FlashBanner
+          tone="success"
+          icon={<CheckCircle2 className="size-4" />}
+          title={`Connected · ${connectedCount} account${connectedCount === 1 ? "" : "s"} discovered`}
+          body="Customer IDs are stored. The full import (campaigns, ad groups, assets, conversion actions) runs next from the account detail page."
+        />
+      )}
+      {oauthError && (
+        <FlashBanner
+          tone="error"
+          icon={<AlertTriangle className="size-4" />}
+          title="Connection failed"
+          body={oauthError}
+        />
+      )}
+
       {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
@@ -56,6 +83,32 @@ export default async function AccountsPage() {
         ) : (
           <AccountsTable rows={rows} demoMode={demoMode} />
         )}
+      </div>
+    </div>
+  );
+}
+
+function FlashBanner({
+  tone,
+  icon,
+  title,
+  body,
+}: {
+  tone: "success" | "error";
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-800"
+      : "border-destructive/30 bg-destructive/[0.06] text-destructive";
+  return (
+    <div className={`mb-6 flex items-start gap-3 rounded-xl border px-4 py-3 ${toneClasses}`}>
+      <div className="mt-0.5 shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <div className="text-[13px] font-semibold">{title}</div>
+        <p className="mt-0.5 text-[12.5px] opacity-90">{body}</p>
       </div>
     </div>
   );

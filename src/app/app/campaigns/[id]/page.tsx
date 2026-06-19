@@ -20,6 +20,7 @@ import { TrendChart } from "../../_components/trend-chart";
 
 import { LaunchCard } from "./launch-card";
 import { PmaxSections } from "./pmax-sections";
+import { StatusControls } from "./status-controls";
 
 export async function generateMetadata({
   params,
@@ -113,6 +114,14 @@ export default async function CampaignDetailPage({
                 </span>
               )}
             </div>
+            {/* Pause / Enable / Remove + Refresh-from-Google.
+                Hidden for demo + non-launched campaigns. */}
+            <StatusControls
+              campaignId={campaign.id}
+              currentStatus={campaign.status}
+              hasProviderId={!!campaign.providerCampaignId}
+              isDemo={campaign.demoMode}
+            />
           </div>
         </div>
       </header>

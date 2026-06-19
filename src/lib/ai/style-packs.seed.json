@@ -1,0 +1,359 @@
+{
+  "generatedAt": "2026-06-19T00:00:00.000Z",
+  "source": "hand-curated",
+  "packs": [
+    {
+      "id": "publishing-book-on-color-block",
+      "label": "Publishing · Single book on solid-color block",
+      "sector": "publishing",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#1F8A8A",
+        "secondary": "#FFFFFF",
+        "accent": "#F4A261"
+      },
+      "composition": "Single book cover centered on a solid-color square block, occupying roughly 50% of canvas; 25% breathing room above and below the book.",
+      "mood": ["clean", "confident", "iconic", "modern"],
+      "photographicStyle": "photo",
+      "technique": "Single book on a saturated brand-color block; the block IS the background, no texture, no scene — the book IS the hero.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-24-13.png",
+        "Screenshot from 2026-06-19 16-24-51.png",
+        "Screenshot from 2026-06-19 16-26-27.png",
+        "Screenshot from 2026-06-19 16-27-14.png"
+      ]
+    },
+    {
+      "id": "publishing-audiobook-grid",
+      "label": "Publishing · Multi-cover audiobook grid (designed)",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#B49AC8",
+        "secondary": "#FAF3E3",
+        "accent": "#4A2F6B"
+      },
+      "composition": "Serif headline top-third (white on color OR dark on cream); 2x3 or 3x2 grid of small book covers below; brand mark bottom-center as a small wordmark.",
+      "mood": ["nostalgic", "warm", "curatorial", "premium"],
+      "photographicStyle": "mixed",
+      "technique": "Curated multi-cover grid under a large serif theme headline — sells a category (Historical Fiction, Romance) rather than a single title.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 3,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-23-06.png",
+        "Screenshot from 2026-06-19 16-23-14.png",
+        "Screenshot from 2026-06-19 16-23-22.png",
+        "Screenshot from 2026-06-19 16-24-05.png"
+      ]
+    },
+    {
+      "id": "publishing-shopping-card",
+      "label": "Publishing · Shopping card (book cover on white)",
+      "sector": "publishing",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#E8E8E8",
+        "accent": "#1A73E8"
+      },
+      "composition": "Book cover centered on pure white; no background design, no styling, no scene; portrait crop with generous white margin top + bottom.",
+      "mood": ["minimal", "neutral", "product-first"],
+      "photographicStyle": "photo",
+      "technique": "Book cover on pure white — Google Shopping aesthetic; everything that isn't the product is removed.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-30-07.png",
+        "Screenshot from 2026-06-19 16-30-15.png",
+        "Screenshot from 2026-06-19 16-30-27.png",
+        "Screenshot from 2026-06-19 16-30-47.png",
+        "Screenshot from 2026-06-19 16-31-30.png"
+      ]
+    },
+    {
+      "id": "publishing-premium-photo-overlay",
+      "label": "Publishing · Premium / heritage (dark moody photo + serif overlay)",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#1E3A2C",
+        "secondary": "#F2EAD3",
+        "accent": "#B5793B"
+      },
+      "composition": "Dark moody close-up photo of the physical object (stacked books, illuminated pages) filling the canvas; white serif headline overlay top-left or top-center; rich shadows and warm light source.",
+      "mood": ["premium", "heritage", "reverent", "warm-dark"],
+      "photographicStyle": "photo",
+      "technique": "Dark moody product photography with white serif text overlay — heritage cue; works for religious / luxury / legacy categories.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 4,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-28-44.png",
+        "Screenshot from 2026-06-19 16-28-52.png"
+      ]
+    },
+    {
+      "id": "publishing-flatlay-personal",
+      "label": "Publishing · Personal / lifestyle flatlay",
+      "sector": "publishing",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#1E3A2C",
+        "secondary": "#F2EAD3",
+        "accent": "#C2A87D"
+      },
+      "composition": "Top-down flatlay of book + coffee + textured cloth; centered composition; natural daylight; soft shadows; book centered with props in lower-third.",
+      "mood": ["warm", "intimate", "lifestyle", "calm"],
+      "photographicStyle": "photo",
+      "technique": "Top-down flatlay (book + complementary lifestyle props) — quiet, intimate, personal author / coaching vibe.",
+      "sourceFiles": ["Screenshot from 2026-06-19 16-27-45.png"]
+    },
+    {
+      "id": "saas-clean-illustration",
+      "label": "SaaS / B2B · Cream BG + accent shape + product UI",
+      "sector": "saas",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#F5F1EA",
+        "secondary": "#1A1A1A",
+        "accent": "#E63946"
+      },
+      "composition": "Cream/neutral background fills the canvas; ONE bold accent shape (half-circle, illustrated arrow) sits in the lower-left third; product UI screenshot in upper-right.",
+      "mood": ["modern", "clean", "approachable", "trustworthy"],
+      "photographicStyle": "mixed",
+      "technique": "Neutral base + single accent shape + product UI screenshot — confident, focused, gimmick-free.",
+      "sourceFiles": ["Screenshot from 2026-06-19 16-34-01.png"]
+    },
+    {
+      "id": "services-hands-doing-work",
+      "label": "Local services · Hands-doing-work close-up",
+      "sector": "services",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#2E2A28",
+        "secondary": "#F5F5F5",
+        "accent": "#1A73E8"
+      },
+      "composition": "Tight close-up of skilled hands actively doing the work (wrench on pipe, pen on contract); shallow depth-of-field; tool / object in sharp focus; clean neutral environment.",
+      "mood": ["competent", "trustworthy", "professional", "honest"],
+      "photographicStyle": "photo",
+      "technique": "Macro close-up of skilled hands actively doing the work — proof-of-craft photography, no posed staff portraits.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-35-58.png",
+        "Screenshot from 2026-06-19 16-36-42.png"
+      ]
+    },
+    {
+      "id": "ecom-product-in-styled-scene",
+      "label": "E-commerce · Product in styled room scene",
+      "sector": "ecommerce-home",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#F1ECE2",
+        "secondary": "#6B5B47",
+        "accent": "#A5C9B7"
+      },
+      "composition": "Product placed in a fully-styled interior or patio scene; product occupies 30-40% of canvas; surrounding context (rug, plant, frame, window light) sells the lifestyle; warm natural light.",
+      "mood": ["aspirational", "warm", "tasteful", "livable"],
+      "photographicStyle": "photo",
+      "technique": "Product in a fully-styled scene (not on white) — context sells the lifestyle, surrounding objects do half the work.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-37-33.png",
+        "Screenshot from 2026-06-19 16-37-50.png",
+        "Screenshot from 2026-06-19 16-38-12.png"
+      ]
+    },
+    {
+      "id": "ecom-product-on-white",
+      "label": "E-commerce · Product on pure white (apparel)",
+      "sector": "ecommerce-apparel",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#1A1A1A",
+        "accent": "#E8E2D5"
+      },
+      "composition": "Product on pure white, 3/4 angle; centered; subtle ground shadow; no background, no scene, no props; product fills 40-50% of canvas width.",
+      "mood": ["clean", "premium", "minimal", "iconic"],
+      "photographicStyle": "photo",
+      "technique": "Product on pure white at a slight 3/4 angle — iconic e-commerce shot; soft ground shadow only.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-39-03.png",
+        "Screenshot from 2026-06-19 16-39-36.png"
+      ]
+    },
+    {
+      "id": "subscription-brand-panel",
+      "label": "Subscription · Saturated brand-color panel + bold headline",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#F5A623",
+        "secondary": "#FFFFFF",
+        "accent": "#56C7C7"
+      },
+      "composition": "Saturated single brand-color background fills the canvas; bold sans headline in white or dark, left-aligned, top-half; supporting illustration / accent squiggle / brand wordmark small in corner.",
+      "mood": ["energetic", "confident", "brand-forward", "playful"],
+      "photographicStyle": "mixed",
+      "technique": "Saturated brand-color panel + bold sans headline + decorative squiggle accent — identity-heavy, instantly recognizable.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 5,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-42-22.png",
+        "Screenshot from 2026-06-19 16-43-18.png"
+      ]
+    },
+    {
+      "id": "subscription-lesson-card",
+      "label": "Subscription · Lesson card (instructor + course title)",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#1A1A1A",
+        "accent": "#F5A623"
+      },
+      "composition": "White or light background; brand wordmark top-center; course title centered (bold sans); instructor portrait / video thumbnail below; multi-color squiggle accents around edges; rating badge bottom-right.",
+      "mood": ["approachable", "credible", "creative", "inviting"],
+      "photographicStyle": "mixed",
+      "technique": "Course card layout — brand mark + bold course title + instructor face + colorful accent lines + rating badge.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 7,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-41-54.png",
+        "Screenshot from 2026-06-19 16-42-07.png"
+      ]
+    },
+    {
+      "id": "subscription-gradient-mood",
+      "label": "Subscription · Dark gradient + product trio + bold headline",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#2B1F4A",
+        "secondary": "#F5D547",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Dark gradient background (purple→black or purple→yellow); bold white serif headline top-half; product trio (3 covers/items) in the lower-half overlapping each other; offer chip somewhere mid-canvas.",
+      "mood": ["evocative", "intimate", "premium", "moody"],
+      "photographicStyle": "mixed",
+      "technique": "Dark mood gradient + bold serif headline + product trio overlapping in lower-third — feel-led, not product-led; subscriptions selling emotion.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 7,
+        "placement": "top"
+      },
+      "sourceFiles": ["Screenshot from 2026-06-19 16-33-29.png"]
+    },
+    {
+      "id": "promotional-dark-offer",
+      "label": "Promotional · Dark BG + giant offer text + product strip",
+      "sector": "promotional",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#0D0D0D",
+        "secondary": "#FFFFFF",
+        "accent": "#22C55E"
+      },
+      "composition": "Dark background fills canvas; small brand wordmark + sub-headline top-left; GIANT offer text (e.g. '85% OFF') in white, dominant; horizontal strip of small product thumbnails bottom-third; bright accent chip ('Limited offer') in mid-canvas.",
+      "mood": ["urgent", "high-conversion", "bold", "high-contrast"],
+      "photographicStyle": "mixed",
+      "technique": "Dark BG + giant offer headline + product thumbnail strip + bright accent chip — promotional / discount / Black Friday energy.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 3,
+        "placement": "center"
+      },
+      "sourceFiles": ["Screenshot from 2026-06-19 16-32-11.png"]
+    },
+    {
+      "id": "fintech-saturated-panel",
+      "label": "Fintech · Lime/electric panel + serif headline + product UI",
+      "sector": "fintech",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#D5FB45",
+        "secondary": "#0D0D0D",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Saturated lime (or other electric) background fills canvas; small brand wordmark top-center; bold serif/sans headline dominates top-half; product UI screenshot (phone or web) tilted in the lower-half; legal disclaimer in tiny text bottom.",
+      "mood": ["energetic", "confident", "innovative", "high-contrast"],
+      "photographicStyle": "mixed",
+      "technique": "Saturated electric-color panel + bold headline + product UI screenshot — fintech identity + proof-of-product in one frame.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 6,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-46-06.png",
+        "Screenshot from 2026-06-19 16-46-19.png"
+      ]
+    },
+    {
+      "id": "auto-dark-urgency",
+      "label": "Auto / dealer · Dark gradient + person + benefit list + offer",
+      "sector": "auto",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#0D1B2A",
+        "secondary": "#FFFFFF",
+        "accent": "#E63946"
+      },
+      "composition": "Dark gradient with vehicle showroom backdrop; person standing next to car (smiling, gesturing); bold sans headline top-left ('DRIVE TODAY'); checkmark benefit list mid-canvas; red offer button bottom-left.",
+      "mood": ["urgent", "trustworthy", "human", "high-contrast"],
+      "photographicStyle": "photo",
+      "technique": "Dark gradient + person + product (car) + benefit checklist + offer chip — urgency-driven local-service ad.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 8,
+        "placement": "top"
+      },
+      "sourceFiles": ["Screenshot from 2026-06-19 16-44-12.png"]
+    },
+    {
+      "id": "lifestyle-top-down",
+      "label": "Lifestyle · Top-down hands + supplies / activity",
+      "sector": "lifestyle",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#E8E2D5",
+        "secondary": "#1A1A1A",
+        "accent": "#F4A261"
+      },
+      "composition": "Top-down view of hands actively working on a creative project (pottery, painting, crafting); supplies scattered around in organic composition; natural light; warm neutral background.",
+      "mood": ["creative", "hands-on", "inviting", "warm"],
+      "photographicStyle": "photo",
+      "technique": "Top-down photo of hands engaged in creative activity, surrounded by supplies — invitational, 'you could do this' energy.",
+      "sourceFiles": ["Screenshot from 2026-06-19 16-42-53.png"]
+    },
+    {
+      "id": "native-merchant-strip",
+      "label": "Native · Photo + merchant strip (template chrome)",
+      "sector": "native",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#5A3F2E",
+        "accent": "#1A73E8"
+      },
+      "composition": "Standard photographic image fills the canvas; subject centered; no in-canvas text; designed to slot into a native-ad template that adds a merchant strip below.",
+      "mood": ["contextual", "low-key", "informational"],
+      "photographicStyle": "photo",
+      "technique": "Clean editorial photo — the native template adds the merchant strip and title; we just supply a documentary-grade image.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-41-00.png",
+        "Screenshot from 2026-06-19 16-45-40.png"
+      ]
+    }
+  ]
+}

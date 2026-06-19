@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Megaphone } from "lucide-react";
+import { ArrowLeft, HeartPulse, Megaphone } from "lucide-react";
 
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
+import { db } from "@/lib/db";
 import { getEffectiveDemoMode } from "@/lib/demo/cookie";
 import {
   getAccountDetail,
@@ -15,6 +16,8 @@ import {
 import { KpiTile } from "../../_components/kpi-tile";
 import { TopCampaignsTable } from "../../_components/top-campaigns-table";
 import { TrendChart } from "../../_components/trend-chart";
+
+import { ConnectionCard } from "./connection-card";
 
 export async function generateMetadata({
   params,
@@ -52,7 +55,7 @@ export default async function AccountDetailPage({
   });
   if (!account) notFound();
 
-  const [summary, trend, top] = await Promise.all([
+  const [summary, trend, top, connection] = await Promise.all([
     getKpiSummary({
       userId: user.id,
       demoMode,
@@ -72,6 +75,18 @@ export default async function AccountDetailPage({
       windowDays: 30,
       limit: 5,
     }),
+    // OAuth + import metadata for the ConnectionCard. Demo accounts skip
+    // this — they aren't real and won't ever have a stored token.
+    account.demoMode
+      ? Promise.resolve(null)
+      : db.adsAccount.findFirst({
+          where: { id, userId: user.id },
+          select: {
+            oauthRefreshToken: true,
+            connectedAt: true,
+            lastImportedAt: true,
+          },
+        }),
   ]);
 
   return (
@@ -107,13 +122,24 @@ export default async function AccountDetailPage({
             <span>{account.timeZone ?? "—"}</span>
           </div>
         </div>
-        <Button
-          variant="outline"
-          render={<Link href={`/app/campaigns?accountId=${account.id}`} />}
-        >
-          <Megaphone />
-          View campaigns
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {!account.demoMode && (
+            <Button
+              variant="outline"
+              render={<Link href={`/app/accounts/${account.id}/health`} />}
+            >
+              <HeartPulse />
+              Health
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            render={<Link href={`/app/campaigns?accountId=${account.id}`} />}
+          >
+            <Megaphone />
+            View campaigns
+          </Button>
+        </div>
       </header>
 
       {/* Meta strip */}
@@ -138,6 +164,18 @@ export default async function AccountDetailPage({
         />
         <MetaTile label="Profile" value={account.demoMode ? "Demo" : "Live"} />
       </section>
+
+      {/* OAuth + import status — only meaningful for live accounts. */}
+      {!account.demoMode && (
+        <section className="mt-8">
+          <ConnectionCard
+            accountId={id}
+            connected={!!connection?.oauthRefreshToken}
+            connectedAt={connection?.connectedAt?.toISOString() ?? null}
+            lastImportedAt={connection?.lastImportedAt?.toISOString() ?? null}
+          />
+        </section>
+      )}
 
       {/* KPI tiles — last 30 days */}
       <section className="mt-10">

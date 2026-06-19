@@ -62,6 +62,44 @@ enum AssetRole {
   landscape_logo
 }
 
+/// Where a row originated. `created` = built in our app; `imported` =
+/// pulled from a Google Ads account during the adoption flow. Used so the
+/// UI can show "Imported from Google" badges + so we can apply different
+/// edit rules (e.g. write-back warnings on imported rows).
+enum Source {
+  created
+  imported
+}
+
+enum KeywordMatchType {
+  EXACT
+  PHRASE
+  BROAD
+}
+
+/// Mirrors Google Ads `ConversionAction.category`. We accept the most
+/// common categories and fall back to `OTHER` for anything exotic.
+enum ConversionCategory {
+  PAGE_VIEW
+  PURCHASE
+  SIGNUP
+  LEAD
+  DOWNLOAD
+  STORE_VISIT
+  STORE_SALE
+  PHONE_CALL_LEAD
+  IMPORTED_LEAD
+  SUBMIT_LEAD_FORM
+  BOOK_APPOINTMENT
+  REQUEST_QUOTE
+  ADD_TO_CART
+  BEGIN_CHECKOUT
+  SUBSCRIBE_PAID
+  CONTACT
+  GET_DIRECTIONS
+  OTHER
+}
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
@@ -102,11 +140,32 @@ model AdsAccount {
   demoMode          Boolean  @default(false) @map("demo_mode")
   createdAt         DateTime @default(now()) @map("created_at")
 
+  // ---- OAuth adoption (Phase 8a) -----------------------------------------
+  // Encrypted refresh token for this account's owner. NULL for legacy
+  // accounts that fall back to the env-based `GOOGLE_ADS_REFRESH_TOKEN`.
+  // Format: AES-256-GCM ciphertext encoded as `iv:tag:cipherHex`.
+  oauthRefreshToken  String?   @map("oauth_refresh_token")
+  oauthScope         String?   @map("oauth_scope")
+  /// 'pending' | 'connected' | 'expired' | 'error'
+  connectionStatus   String?   @map("connection_status")
+  connectedAt        DateTime? @map("connected_at")
+  /// Last time the adoption importer ran for this account.
+  lastImportedAt     DateTime? @map("last_imported_at")
+  /// MCC customer ID the OAuth user authorized under (may equal customerId
+  /// when the user owns the account directly).
+  mccCustomerId      String?   @map("mcc_customer_id")
+  /// Whether this customer is itself a manager account (MCC). Set on
+  /// import from `customer.manager`. Sync skips manager rows because
+  /// Google rejects metric queries against them
+  /// ("Metrics cannot be requested for a manager account").
+  isManager          Boolean   @default(false) @map("is_manager")
+
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaigns          Campaign[]
   assets             Asset[]             @relation("AssetAccount")
   benchmarkSnapshots BenchmarkSnapshot[]
   ga4Link            Ga4LinkStatus?
+  conversionActions  ConversionAction[]
 
   @@unique([userId, provider, customerId], name: "uq_account_user_provider_customer")
   @@index([userId])
@@ -132,6 +191,8 @@ model Campaign {
   // this campaign so the operator knows whether it's on test or prod.
   launchedProfile     String?        @map("launched_profile") // 'test' | 'prod' | null
   launchedAt          DateTime?      @map("launched_at")
+  /// `created` = built in our app, `imported` = mirrored from Google.
+  source              Source         @default(created)
   demoMode            Boolean        @default(false) @map("demo_mode")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
@@ -139,11 +200,149 @@ model Campaign {
   account        AdsAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   dailyKpis      DailyKpi[]
   campaignAssets CampaignAsset[]
+  adGroups       AdGroup[]
+  assetGroups    AssetGroup[]
 
   @@index([accountId])
   @@index([providerCampaignId])
   @@index([demoMode])
   @@map("campaigns")
+}
+
+// ---------------------------------------------------------------------------
+// AdGroup — a SEARCH-channel ad group within a campaign.
+//
+// One Campaign can have N ad groups (Phase 8a foundation). PMAX uses
+// AssetGroup instead; SEARCH uses AdGroup.
+//
+// For v1 we embed the single Responsive Search Ad (RSA) fields directly
+// on the AdGroup row (headlines / descriptions / finalUrls / paths). When
+// we need multi-RSA support we'll promote those into a child `Ad` model.
+// ---------------------------------------------------------------------------
+model AdGroup {
+  id                  String         @id @default(cuid())
+  campaignId          String         @map("campaign_id")
+  providerAdGroupId   String?        @map("provider_ad_group_id")
+  /// The RSA's provider resource ID (separate from the ad group ID).
+  providerAdId        String?        @map("provider_ad_id")
+  name                String
+  /// Theme cluster label — "Branded" / "Informational" / "Competitor" / etc.
+  /// Used so bleed-detection can attribute spend to a meaningful bucket.
+  themeLabel          String?        @map("theme_label")
+  status              CampaignStatus @default(PAUSED)
+  cpcBidMicros        BigInt?        @map("cpc_bid_micros")
+
+  /// RSA content embedded for v1 (string[] of headlines, descriptions, URLs)
+  headlines           Json
+  descriptions        Json
+  finalUrls           Json           @map("final_urls")
+  path1               String?
+  path2               String?
+
+  source              Source         @default(created)
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  keywords Keyword[]
+
+  @@index([campaignId])
+  @@index([providerAdGroupId])
+  @@map("ad_groups")
+}
+
+// ---------------------------------------------------------------------------
+// Keyword — a positive or negative keyword on an AdGroup.
+// ---------------------------------------------------------------------------
+model Keyword {
+  id                  String           @id @default(cuid())
+  adGroupId           String           @map("ad_group_id")
+  providerCriterionId String?          @map("provider_criterion_id")
+  text                String
+  matchType           KeywordMatchType @map("match_type")
+  isNegative          Boolean          @default(false) @map("is_negative")
+  status              CampaignStatus   @default(ENABLED)
+  source              Source           @default(created)
+  createdAt           DateTime         @default(now()) @map("created_at")
+
+  adGroup AdGroup @relation(fields: [adGroupId], references: [id], onDelete: Cascade)
+
+  @@index([adGroupId])
+  @@index([providerCriterionId])
+  @@map("keywords")
+}
+
+// ---------------------------------------------------------------------------
+// AssetGroup — a PMAX asset group within a campaign.
+//
+// PMAX organizes creatives into asset groups (the rough analog of SEARCH
+// ad groups). Each asset group has its own headlines / descriptions /
+// images / business name. Phase 10's bleed-detection treats asset groups
+// the same way it treats ad groups: bucketed spend → independent decisions.
+// ---------------------------------------------------------------------------
+model AssetGroup {
+  id                     String         @id @default(cuid())
+  campaignId             String         @map("campaign_id")
+  providerAssetGroupId   String?        @map("provider_asset_group_id")
+  name                   String
+  themeLabel             String?        @map("theme_label")
+  status                 CampaignStatus @default(PAUSED)
+  finalUrl               String?        @map("final_url")
+
+  /// PMAX text assets (embedded for v1 simplicity; promote to child models
+  /// when we add multi-headline editing per asset).
+  headlines              Json
+  longHeadlines          Json           @map("long_headlines")
+  descriptions           Json
+  businessName           String?        @map("business_name")
+
+  source                 Source         @default(created)
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([providerAssetGroupId])
+  @@map("asset_groups")
+}
+
+// ---------------------------------------------------------------------------
+// ConversionAction — mirrors Google Ads ConversionAction.
+//
+// Critical for Phase 8b (tracking-health audit) — we surface `✓ working`
+// / `⚠ stale` / `✗ broken` per row based on `lastConversionAt` +
+// `recentConversions`. This is what catches Blue Balloon's broken-since-
+// Aug-2025 tracking on day 1 of adoption.
+// ---------------------------------------------------------------------------
+model ConversionAction {
+  id                       String              @id @default(cuid())
+  accountId                String              @map("account_id")
+  providerConversionId     String?             @map("provider_conversion_id")
+  name                     String
+  category                 ConversionCategory  @default(OTHER)
+  status                   CampaignStatus      @default(ENABLED)
+  /// Whether this counts toward the "Conversions" column (vs "All conversions").
+  isPrimary                Boolean             @default(true) @map("is_primary")
+  /// `ONE_PER_CLICK` | `MANY_PER_CLICK`
+  countingType             String?             @map("counting_type")
+  /// Days the conversion stays attributable after the click.
+  clickThroughLookbackDays Int?                @map("click_through_lookback_days")
+  /// Static value per conversion in micros. NULL if dynamic / count-only.
+  valueMicros              BigInt?             @map("value_micros")
+  /// Last time a conversion actually fired (filled by the daily sync).
+  lastConversionAt         DateTime?           @map("last_conversion_at")
+  /// Conversion count over a recent rolling window (filled by sync).
+  recentConversions        Int?                @map("recent_conversions")
+  source                   Source              @default(imported)
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([providerConversionId])
+  @@map("conversion_actions")
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +363,28 @@ model DailyKpi {
   @@unique([campaignId, date], name: "uq_daily_kpi_campaign_date")
   @@index([campaignId])
   @@map("daily_kpis")
+}
+
+// ---------------------------------------------------------------------------
+// DailyAdGroupKpi — one row per ad group per date.
+//
+// Required for bleed detection (Phase 10): we attribute spend / conversions
+// to the smallest meaningful bucket, so we can pause individual ad groups
+// rather than killing whole campaigns when one theme is bleeding.
+// ---------------------------------------------------------------------------
+model DailyAdGroupKpi {
+  id                    String   @id @default(cuid())
+  adGroupId             String   @map("ad_group_id")
+  date                  DateTime @db.Date
+  impressions           BigInt   @default(0)
+  clicks                BigInt   @default(0)
+  costMicros            BigInt   @default(0) @map("cost_micros")
+  conversions           Float    @default(0)
+  conversionValueMicros BigInt   @default(0) @map("conversion_value_micros")
+
+  @@unique([adGroupId, date], name: "uq_daily_ad_group_kpi_date")
+  @@index([adGroupId])
+  @@map("daily_ad_group_kpis")
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +411,9 @@ model Asset {
   sha256               String
   bytes                Bytes
   providerResourceName String?   @map("provider_resource_name")
+  /// `created` for uploaded/AI-generated, `imported` for assets pulled
+  /// from Google during account adoption.
+  source               Source    @default(created)
   demoMode             Boolean   @default(false) @map("demo_mode")
   createdAt            DateTime  @default(now()) @map("created_at")
 

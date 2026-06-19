@@ -13,6 +13,7 @@ import {
   Megaphone,
   Menu,
   Settings,
+  Sparkles,
   Users,
   X,
   type LucideIcon,
@@ -40,6 +41,7 @@ const SECTIONS: Section[] = [
     label: "Workspace",
     items: [
       { href: "/app", label: "Overview", icon: LayoutDashboard },
+      { href: "/app/preview", label: "Preview", icon: Sparkles },
       { href: "/app/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/app/accounts", label: "Accounts", icon: Building2 },
       { href: "/app/assets", label: "Assets", icon: ImageIcon },

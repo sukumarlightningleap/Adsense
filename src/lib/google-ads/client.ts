@@ -9,8 +9,13 @@
  * Heavy gRPC bootstrap happens lazily on first call.
  */
 import { GoogleAdsApi, type Customer } from "google-ads-api";
+import type { AdsAccount } from "@prisma/client";
 
-import { loadCredentials, type GoogleAdsCredentials } from "./auth";
+import {
+  loadCredentials,
+  loadCredentialsForAccount,
+  type GoogleAdsCredentials,
+} from "./auth";
 
 let cachedClient: GoogleAdsApi | null = null;
 let cachedCredsKey: string | null = null;
@@ -55,5 +60,34 @@ export function buildCustomer(args: {
     login_customer_id:
       args.loginCustomerId?.replace(/-/g, "").trim() ||
       creds.loginCustomerId,
+  });
+}
+
+/**
+ * Mint a Customer using the credentials stored on an AdsAccount row.
+ * Falls back to env-based credentials when the row has no OAuth token
+ * (legacy accounts), so the launcher can keep working pre-Phase-8a.
+ *
+ * Used by the adoption importer + daily sync cron + write-back actions.
+ */
+export function buildCustomerForAccount(
+  account: Pick<
+    AdsAccount,
+    | "customerId"
+    | "loginCustomerId"
+    | "mccCustomerId"
+    | "oauthRefreshToken"
+  >,
+): Customer {
+  const creds = loadCredentialsForAccount(account);
+  // Mint a fresh client only if creds differ from cache (rare — only when
+  // env profile flips). For per-account creds the developer_token +
+  // client_id are stable across all customer accounts; the refresh_token
+  // is what varies and is passed to .Customer() not the constructor.
+  const { client } = buildClient();
+  return client.Customer({
+    customer_id: account.customerId.replace(/-/g, "").trim(),
+    refresh_token: creds.refreshToken,
+    login_customer_id: creds.loginCustomerId,
   });
 }

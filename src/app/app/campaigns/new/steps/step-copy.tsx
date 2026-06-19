@@ -1,7 +1,7 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { Plus, Sparkles, X } from "lucide-react";
+import { useState, useTransition } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,16 +9,123 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { CampaignDraft } from "@/lib/wizard/schema";
 
+import { generateCopyAction } from "../actions";
+
 type Props = {
   draft: CampaignDraft;
   onChange: (next: CampaignDraft) => void;
 };
 
 export function StepCopy({ draft, onChange }: Props) {
-  if (draft.channel === "PMAX") {
-    return <PmaxCopy draft={draft} onChange={onChange} />;
+  return (
+    <div className="space-y-6">
+      <AICopyBar draft={draft} onChange={onChange} />
+      {draft.channel === "PMAX" ? (
+        <PmaxCopy draft={draft} onChange={onChange} />
+      ) : (
+        <SearchCopy draft={draft} onChange={onChange} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI generate bar — fills the channel-specific copy slice from the brief
+// assembled out of step 1 (title + description) and step 2 (country).
+// ---------------------------------------------------------------------------
+function AICopyBar({ draft, onChange }: Props) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const canGenerate =
+    draft.book.title.trim().length > 0 &&
+    draft.book.description.trim().length > 0;
+
+  function onGenerate() {
+    setError(null);
+    startTransition(async () => {
+      const res = await generateCopyAction(draft);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      if (res.channel === "PMAX") {
+        onChange({
+          ...draft,
+          pmaxAdCopy: {
+            ...draft.pmaxAdCopy!,
+            businessName: res.copy.businessName,
+            headlines: res.copy.headlines,
+            longHeadlines: res.copy.longHeadlines,
+            descriptions: res.copy.descriptions,
+          },
+        });
+      } else {
+        onChange({
+          ...draft,
+          searchAdCopy: {
+            ...draft.searchAdCopy!,
+            headlines: res.copy.headlines,
+            descriptions: res.copy.descriptions,
+            // Seed keywords too, but keep whatever the user already typed.
+            keywords: dedupeMerge(
+              draft.searchAdCopy?.keywords ?? [],
+              res.copy.keywords,
+            ),
+          },
+        });
+      }
+    });
   }
-  return <SearchCopy draft={draft} onChange={onChange} />;
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-gradient-to-br from-violet-500/[0.04] to-transparent p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="grid size-8 shrink-0 place-items-center rounded-md bg-foreground text-background">
+            <Sparkles className="size-4" />
+          </div>
+          <div>
+            <div className="text-[13.5px] font-semibold">
+              Generate with AI
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              {canGenerate
+                ? `Drafts ${draft.channel === "PMAX" ? "PMAX headlines, long headlines, descriptions + business name" : "RSA headlines, descriptions + keyword suggestions"} from your step-1 brief.`
+                : "Add a title and description on step 1 first."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={!canGenerate || pending}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-foreground px-3.5 text-[12.5px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Sparkles className="size-3.5" />
+          {pending ? "Generating…" : "Generate"}
+        </button>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11.5px] text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function dedupeMerge(existing: string[], incoming: string[]): string[] {
+  const seen = new Set(existing.map((k) => k.toLowerCase().trim()));
+  const out = [...existing];
+  for (const k of incoming) {
+    const key = k.toLowerCase().trim();
+    if (!seen.has(key)) {
+      out.push(k);
+      seen.add(key);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
