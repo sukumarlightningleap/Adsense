@@ -80,20 +80,47 @@ export async function launchPmaxCampaign(args: {
   );
   const campaignId = campaignResourceName.split("/").pop()!;
 
-  // 3. Text assets — headlines + long_headlines + descriptions + business_name
-  const textAssets = await createTextAssets(customer, payload);
-
-  // 4. Image assets — fetched from our DB (variants matched by role)
+  // 4. Image assets — fetched from our DB (variants matched by role).
+  //    Created ONCE and shared across every asset group when this is a
+  //    multi-asset-group campaign (Phase A5). Image assets are global
+  //    to the customer in Google's model, so we can link the same one
+  //    into multiple AssetGroups via per-group AssetGroupAsset rows.
   const imageAssets = await createImageAssets(customer, payload);
 
-  // 5. AssetGroup + every AssetGroupAsset (atomic bulk_mutate)
-  await createAssetGroupWithAssets({
-    customer,
-    customerId,
-    campaignResourceName,
-    payload,
-    allAssets: [...textAssets, ...imageAssets],
-  });
+  // 3 + 5. Text assets + AssetGroup creation. Two branches:
+  //   • payload.asset_groups present → Phase A5 multi-asset-group flow
+  //   • otherwise                    → legacy single-asset-group flow
+  let totalTextAssetCount = 0;
+  let assetGroupCount = 1;
+  if (payload.asset_groups && payload.asset_groups.length > 0) {
+    assetGroupCount = payload.asset_groups.length;
+    for (const cluster of payload.asset_groups) {
+      const clusterTextAssets = await createTextAssetsFromCluster(
+        customer,
+        cluster,
+      );
+      totalTextAssetCount += clusterTextAssets.length;
+      await createAssetGroupWithAssetsNamed({
+        customer,
+        customerId,
+        campaignResourceName,
+        finalUrl: payload.book.landing_page_url,
+        nameSuffix: cluster.theme_label,
+        allAssets: [...clusterTextAssets, ...imageAssets],
+      });
+    }
+  } else {
+    // Legacy single-asset-group flow — unchanged
+    const textAssets = await createTextAssets(customer, payload);
+    totalTextAssetCount = textAssets.length;
+    await createAssetGroupWithAssets({
+      customer,
+      customerId,
+      campaignResourceName,
+      payload,
+      allAssets: [...textAssets, ...imageAssets],
+    });
+  }
 
   // 6. Geo criteria (campaign-level, same as SEARCH)
   await createGeoCriteria(customer, campaignResourceName, geoConstants);
@@ -104,10 +131,128 @@ export async function launchPmaxCampaign(args: {
     status: "PAUSED",
     operations: summarize(payload, {
       geoCount: geoConstants.length,
-      textAssetCount: textAssets.length,
+      textAssetCount: totalTextAssetCount,
       imageAssetCount: imageAssets.length,
+      assetGroupCount,
     }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Text assets from a single cluster (Phase A5 multi-asset-group).
+// Each cluster has its own headlines/long_headlines/descriptions/business_name,
+// so each cluster needs its own pool of TEXT assets.
+// ---------------------------------------------------------------------------
+async function createTextAssetsFromCluster(
+  customer: Customer,
+  cluster: {
+    headlines: string[];
+    long_headlines: string[];
+    descriptions: string[];
+    business_name: string;
+  },
+): Promise<CreatedAsset[]> {
+  type Spec = { text: string; role: FieldRole };
+  const specs: Spec[] = [
+    ...cluster.headlines.map(
+      (t): Spec => ({ text: t.slice(0, 30), role: "HEADLINE" }),
+    ),
+    ...cluster.long_headlines.map(
+      (t): Spec => ({ text: t.slice(0, 90), role: "LONG_HEADLINE" }),
+    ),
+    ...cluster.descriptions.map(
+      (t): Spec => ({ text: t.slice(0, 90), role: "DESCRIPTION" }),
+    ),
+    {
+      text: cluster.business_name.slice(0, 25),
+      role: "BUSINESS_NAME",
+    },
+  ];
+
+  const result = await customer.assets.create(
+    specs.map(
+      (s) =>
+        ({
+          text_asset: { text: s.text },
+        }) as Parameters<typeof customer.assets.create>[0][number],
+    ),
+  );
+
+  return specs.map((s, i) => {
+    const rn = result.results[i]?.resource_name;
+    if (!rn) throw new Error(`Failed to create cluster text asset (${s.role})`);
+    return { resourceName: rn, role: s.role };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 5b. AssetGroup + AssetGroupAssets (atomic bulk_mutate) — version that
+// takes a name suffix + explicit final URL so each cluster can produce
+// its own named asset group like "Ikigai · Researcher AssetGroup".
+// Each call uses temp ID -1 inside its own mutate, which is safe because
+// every mutate is independent.
+// ---------------------------------------------------------------------------
+async function createAssetGroupWithAssetsNamed({
+  customer,
+  customerId,
+  campaignResourceName,
+  finalUrl,
+  nameSuffix,
+  allAssets,
+}: {
+  customer: Customer;
+  customerId: string;
+  campaignResourceName: string;
+  finalUrl: string;
+  nameSuffix: string;
+  allAssets: CreatedAsset[];
+}): Promise<void> {
+  const assetGroupTempName = `customers/${customerId}/assetGroups/${ASSET_GROUP_TEMP_ID}`;
+  const safeSuffix = nameSuffix.slice(0, 40).replace(/[^\w\s\-·]/g, "");
+
+  type MutateOp = {
+    entity: string;
+    operation: "create";
+    resource: Record<string, unknown>;
+  };
+  const operations: MutateOp[] = [
+    {
+      entity: "asset_group",
+      operation: "create",
+      resource: {
+        resource_name: assetGroupTempName,
+        name: `${safeSuffix} AssetGroup`.slice(0, 80),
+        campaign: campaignResourceName,
+        final_urls: [finalUrl],
+        final_mobile_urls: [finalUrl],
+        status: enums.AssetGroupStatus.PAUSED,
+      },
+    },
+  ];
+
+  for (const { resourceName, role } of allAssets) {
+    const fieldType = (
+      enums.AssetFieldType as unknown as Record<string, number>
+    )[role];
+    if (fieldType == null) {
+      throw new Error(`Unknown AssetFieldType: ${role}`);
+    }
+    operations.push({
+      entity: "asset_group_asset",
+      operation: "create",
+      resource: {
+        asset_group: assetGroupTempName,
+        asset: resourceName,
+        field_type: fieldType,
+      },
+    });
+  }
+
+  await (
+    customer as unknown as {
+      mutateResources: (ops: unknown[]) => Promise<unknown>;
+    }
+  ).mutateResources(operations);
 }
 
 // ---------------------------------------------------------------------------
@@ -476,7 +621,12 @@ function randomToken(bytes: number): string {
 
 function summarize(
   payload: PmaxLaunchPayload,
-  counts: { geoCount: number; textAssetCount: number; imageAssetCount: number },
+  counts: {
+    geoCount: number;
+    textAssetCount: number;
+    imageAssetCount: number;
+    assetGroupCount?: number;
+  },
 ): OperationSummary[] {
   return [
     { type: "CampaignBudget", detail: { daily_usd: payload.budget.daily_usd } },
@@ -509,7 +659,11 @@ function summarize(
     {
       type: "AssetGroup",
       detail: {
-        name: payload.book.title,
+        count: counts.assetGroupCount ?? 1,
+        labels:
+          payload.asset_groups?.map((g) => g.theme_label) ?? [
+            payload.book.title,
+          ],
         final_url: payload.book.landing_page_url,
       },
     },

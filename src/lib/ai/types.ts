@@ -41,6 +41,69 @@ export type GeneratedSearchCopy = {
   keywords: string[];       // 10-25 suggestions, ≤80 chars
 };
 
+/**
+ * One ad group's worth of SEARCH content — Phase A5 (multi-ad-group).
+ *
+ * Each cluster is a tight thematic group of keywords + ads that share a
+ * single buyer intent. Google's 2026 best practice is 5-15 keywords per
+ * ad group with ad copy that speaks to all of them.
+ *
+ * Common themes the architect picks from:
+ *   - "Branded"        — searches for the brand/product by name
+ *   - "Informational"  — users researching the topic
+ *   - "Competitor"     — comparing to alternatives
+ *   - "Pain-point"     — searching their problem
+ *   - "Audience-X"     — e.g. "for busy professionals"
+ */
+export type ThemeCluster = {
+  /** Short noun the UI surfaces as the ad group label. */
+  themeLabel: string;
+  /** 1-sentence buyer intent — surfaced as a hint above the cluster. */
+  intent: string;
+  /** RSA headlines tuned to this theme. 3-15 items, ≤30 chars each. */
+  headlines: string[];
+  /** RSA descriptions for this theme. 2-4 items, ≤90 chars each. */
+  descriptions: string[];
+  /** Positive keywords for this theme. 1-50 items, ≤80 chars each. */
+  keywords: string[];
+};
+
+export type GeneratedClusteredSearchCopy = {
+  /** 1-5 ad groups — architect picks the count based on brief breadth. */
+  clusters: ThemeCluster[];
+};
+
+/**
+ * One PMAX asset group's worth of content — Phase A5 (multi-asset-group).
+ *
+ * PMAX best practice: most campaigns use 1 asset group. Multi-group only
+ * when the brand has DISTINCT buyer personas / lifecycle stages /
+ * product lines. Cap at 3 for v1.
+ *
+ * Common audience themes the architect picks from:
+ *   • "Generic awareness" — broad, no specific buyer intent
+ *   • "Researcher"        — comparing options
+ *   • "Ready to buy"      — high purchase intent
+ *   • "Existing customer" — retention / upsell
+ *   • "Audience-X"        — e.g. "for parents", "for B2B"
+ *
+ * Image assets are SHARED across asset groups (one campaign-wide image
+ * pool). Only text assets differ per cluster.
+ */
+export type PmaxAssetGroupCluster = {
+  themeLabel: string;
+  intent: string;
+  headlines: string[];      // 3-15, ≤30 chars
+  longHeadlines: string[];  // 1-5, ≤90 chars
+  descriptions: string[];   // 2-5, ≤90 chars
+  businessName: string;     // ≤25 chars (usually same brand across clusters)
+};
+
+export type GeneratedClusteredPmaxCopy = {
+  /** 1-3 asset groups — architect picks count based on audience breadth. */
+  clusters: PmaxAssetGroupCluster[];
+};
+
 export type GeneratedPmaxCopy = {
   headlines: string[];        // 15 items, ≤30 chars
   longHeadlines: string[];    // 5 items, ≤90 chars

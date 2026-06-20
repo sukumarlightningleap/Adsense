@@ -15,6 +15,10 @@
 import { db } from "@/lib/db";
 
 import { buildCustomerForAccount } from "./client";
+import {
+  detectAndEmitHealthTransitions,
+  snapshotConversionHealth,
+} from "./health-transitions";
 
 type AdsCustomer = ReturnType<typeof buildCustomerForAccount>;
 
@@ -245,6 +249,12 @@ export async function syncAccount(opts: {
   //   - lastConversionAt  = max(date) where all_conversions > 0
   //   - recentConversions = sum(all_conversions) over the window
   // Phase 8b then surfaces ✗ broken / ⚠ stale / ✓ working based on these.
+  //
+  // Phase B7: snapshot health BEFORE the update so we can detect
+  // transitions (working→broken, etc.) and emit notifications below.
+  const healthBefore = await snapshotConversionHealth(account.id).catch(
+    () => new Map(),
+  );
   let conversionActionsUpdated = 0;
   try {
     type ConvStatRow = {
@@ -297,6 +307,18 @@ export async function syncAccount(opts: {
     }
   } catch (e) {
     errors.push(`conversion_action_stats: ${errMsg(e)}`);
+  }
+
+  // Phase B7: compare new health vs the pre-sync snapshot and emit a
+  // notification on every transition the customer cares about. Errors
+  // here never block the sync — we just record them in the audit log.
+  try {
+    await detectAndEmitHealthTransitions({
+      accountId: account.id,
+      before: healthBefore,
+    });
+  } catch (e) {
+    errors.push(`health_transitions: ${errMsg(e)}`);
   }
 
   // Audit log.

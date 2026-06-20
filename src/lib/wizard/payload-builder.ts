@@ -33,12 +33,29 @@ export type SearchLaunchPayload = SharedFields & {
     max_cpc_usd?: number;
     target_cpa_usd?: number;
   };
+  /**
+   * Legacy single-ad-group copy. Always present so older campaigns +
+   * the wizard path keep working. When `ad_groups` is also present,
+   * the adapter prefers the multi-ad-group flow and ignores this.
+   */
   ad_copy: {
     headlines: string[];
     descriptions: string[];
     keywords: string[];
     negative_keywords?: string[];
   };
+  /**
+   * Multi-ad-group copy (Phase A5). One entry per ad group — the
+   * adapter creates a named AdGroup + RSA + keyword set for each.
+   */
+  ad_groups?: Array<{
+    theme_label: string;
+    intent?: string;
+    headlines: string[];
+    descriptions: string[];
+    keywords: string[];
+    negative_keywords?: string[];
+  }>;
 };
 
 export type PmaxLaunchPayload = SharedFields & {
@@ -53,12 +70,30 @@ export type PmaxLaunchPayload = SharedFields & {
     target_cpa_usd?: number;
     target_roas?: number;
   };
+  /**
+   * Legacy single-asset-group copy. Always populated for backward compat;
+   * when `asset_groups` is also present the adapter prefers the multi-
+   * asset-group flow and uses this only as a fallback (cluster #0).
+   */
   ad_copy: {
     headlines: string[]; // short, ≤30
     long_headlines: string[]; // ≤90
     descriptions: string[]; // ≤90
     business_name: string; // ≤25
   };
+  /**
+   * Multi-asset-group copy (Phase A5). One entry per asset group — the
+   * PMAX adapter creates a named AssetGroup + its text-asset links for
+   * each. Image assets are shared across all groups.
+   */
+  asset_groups?: Array<{
+    theme_label: string;
+    intent?: string;
+    headlines: string[];
+    long_headlines: string[];
+    descriptions: string[];
+    business_name: string;
+  }>;
   assets?: {
     logo_asset_id?: string;
     landscape_logo_asset_id?: string;
@@ -92,7 +127,35 @@ export function buildLaunchPayload(draft: CampaignDraft): LaunchPayload {
 
   if (draft.channel === "SEARCH") {
     const b = draft.searchBudget!;
-    const c = draft.searchAdCopy!;
+    const c = draft.searchAdCopy;
+    const groups = draft.searchAdGroups;
+
+    // Resolve a "legacy" single-ad-group fallback for `ad_copy` so the
+    // shape is always present (older campaigns + the adapter's
+    // backward-compat branch read from it). If only multi-ad-group
+    // data is supplied, flatten the first cluster into ad_copy.
+    const firstGroup = groups?.[0];
+    const legacyAdCopy = c
+      ? {
+          headlines: c.headlines,
+          descriptions: c.descriptions,
+          keywords: c.keywords,
+          ...(c.negativeKeywords && c.negativeKeywords.length > 0
+            ? { negative_keywords: c.negativeKeywords }
+            : {}),
+        }
+      : firstGroup
+        ? {
+            headlines: firstGroup.headlines,
+            descriptions: firstGroup.descriptions,
+            keywords: firstGroup.keywords,
+            ...(firstGroup.negativeKeywords &&
+            firstGroup.negativeKeywords.length > 0
+              ? { negative_keywords: firstGroup.negativeKeywords }
+              : {}),
+          }
+        : { headlines: [], descriptions: [], keywords: [] };
+
     return {
       ...shared,
       channel: "SEARCH",
@@ -102,21 +165,55 @@ export function buildLaunchPayload(draft: CampaignDraft): LaunchPayload {
         ...(b.maxCpcUsd != null ? { max_cpc_usd: b.maxCpcUsd } : {}),
         ...(b.targetCpaUsd != null ? { target_cpa_usd: b.targetCpaUsd } : {}),
       },
-      ad_copy: {
-        headlines: c.headlines,
-        descriptions: c.descriptions,
-        keywords: c.keywords,
-        ...(c.negativeKeywords && c.negativeKeywords.length > 0
-          ? { negative_keywords: c.negativeKeywords }
-          : {}),
-      },
+      ad_copy: legacyAdCopy,
+      ...(groups && groups.length > 0
+        ? {
+            ad_groups: groups.map((g) => ({
+              theme_label: g.themeLabel,
+              ...(g.intent ? { intent: g.intent } : {}),
+              headlines: g.headlines,
+              descriptions: g.descriptions,
+              keywords: g.keywords,
+              ...(g.negativeKeywords && g.negativeKeywords.length > 0
+                ? { negative_keywords: g.negativeKeywords }
+                : {}),
+            })),
+          }
+        : {}),
     };
   }
 
   // PMAX
   const b = draft.pmaxBudget!;
-  const c = draft.pmaxAdCopy!;
+  const c = draft.pmaxAdCopy;
+  const groups = draft.pmaxAssetGroups;
   const a = draft.pmaxAssets;
+
+  // Resolve legacy single-group `ad_copy` from the first cluster when
+  // only multi-asset-group data is supplied — keeps older adapter code
+  // paths + audit logs / KPI displays consistent.
+  const firstGroup = groups?.[0];
+  const legacyAdCopy = c
+    ? {
+        headlines: c.headlines,
+        long_headlines: c.longHeadlines,
+        descriptions: c.descriptions,
+        business_name: c.businessName,
+      }
+    : firstGroup
+      ? {
+          headlines: firstGroup.headlines,
+          long_headlines: firstGroup.longHeadlines,
+          descriptions: firstGroup.descriptions,
+          business_name: firstGroup.businessName,
+        }
+      : {
+          headlines: [],
+          long_headlines: [],
+          descriptions: [],
+          business_name: "",
+        };
+
   return {
     ...shared,
     channel: "PMAX",
@@ -126,12 +223,19 @@ export function buildLaunchPayload(draft: CampaignDraft): LaunchPayload {
       ...(b.targetCpaUsd != null ? { target_cpa_usd: b.targetCpaUsd } : {}),
       ...(b.targetRoas != null ? { target_roas: b.targetRoas } : {}),
     },
-    ad_copy: {
-      headlines: c.headlines,
-      long_headlines: c.longHeadlines,
-      descriptions: c.descriptions,
-      business_name: c.businessName,
-    },
+    ad_copy: legacyAdCopy,
+    ...(groups && groups.length > 0
+      ? {
+          asset_groups: groups.map((g) => ({
+            theme_label: g.themeLabel,
+            ...(g.intent ? { intent: g.intent } : {}),
+            headlines: g.headlines,
+            long_headlines: g.longHeadlines,
+            descriptions: g.descriptions,
+            business_name: g.businessName,
+          })),
+        }
+      : {}),
     ...(a && Object.values(a).some(Boolean)
       ? {
           assets: {

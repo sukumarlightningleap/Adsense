@@ -14,7 +14,6 @@ import {
   Megaphone,
   Menu,
   Settings,
-  Sparkles,
   Users,
   Wand2,
   X,
@@ -44,7 +43,6 @@ const SECTIONS: Section[] = [
     items: [
       { href: "/app", label: "Overview", icon: LayoutDashboard },
       { href: "/app/create", label: "Create", icon: Wand2 },
-      { href: "/app/preview", label: "Preview", icon: Sparkles },
       { href: "/app/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/app/accounts", label: "Accounts", icon: Building2 },
       { href: "/app/assets", label: "Assets", icon: ImageIcon },

@@ -101,6 +101,39 @@ export const SearchAdCopySchema = z.object({
   negativeKeywords: z.array(z.string().min(1).max(80)).optional(),
 });
 
+/**
+ * Multi-ad-group SEARCH copy (Phase A5). When the autopilot writes this
+ * shape on launch, the SEARCH adapter creates ONE ad group per cluster
+ * — each with its own RSA + keyword set. The legacy `SearchAdCopySchema`
+ * stays around for the wizard's single-ad-group path; the schema's
+ * Step3 accepts EITHER shape.
+ */
+export const SearchAdGroupSchema = z.object({
+  themeLabel: z
+    .string()
+    .min(1, "Theme label required")
+    .max(50, "Keep theme labels under 50 chars"),
+  intent: z.string().max(500).optional(),
+  headlines: z
+    .array(z.string().min(1).max(30))
+    .min(3, "At least 3 headlines per ad group")
+    .max(15),
+  descriptions: z
+    .array(z.string().min(1).max(90))
+    .min(2, "At least 2 descriptions per ad group")
+    .max(4),
+  keywords: z
+    .array(z.string().min(1).max(80))
+    .min(1, "At least 1 keyword per ad group")
+    .max(50, "Keep ad groups tight — max 50 keywords"),
+  negativeKeywords: z.array(z.string().min(1).max(80)).optional(),
+});
+
+export const SearchAdGroupsSchema = z
+  .array(SearchAdGroupSchema)
+  .min(1, "At least 1 ad group")
+  .max(5, "Max 5 ad groups per campaign (autopilot v1)");
+
 // PMAX ad copy (short + long headlines + descriptions + business name).
 // Asset minimums from Google's PMAX requirements (May 2026):
 //   - HEADLINE: ≤30 chars, 3 min, 15 max
@@ -125,6 +158,37 @@ export const PmaxAdCopySchema = z.object({
     .min(1, "Business name is required")
     .max(25, "Max 25 chars per Google's spec"),
 });
+
+/**
+ * Multi-asset-group PMAX copy (Phase A5). The PMAX adapter creates one
+ * AssetGroup per cluster; image assets are shared across all groups
+ * (single campaign-wide image pool).
+ */
+export const PmaxAssetGroupSchema = z.object({
+  themeLabel: z
+    .string()
+    .min(1, "Theme label required")
+    .max(50, "Keep theme labels under 50 chars"),
+  intent: z.string().max(500).optional(),
+  headlines: z
+    .array(z.string().min(1).max(30))
+    .min(3, "At least 3 short headlines per asset group")
+    .max(15),
+  longHeadlines: z
+    .array(z.string().min(1).max(90))
+    .min(1, "At least 1 long headline per asset group")
+    .max(5),
+  descriptions: z
+    .array(z.string().min(1).max(90))
+    .min(2, "At least 2 descriptions per asset group")
+    .max(5),
+  businessName: z.string().min(1).max(25),
+});
+
+export const PmaxAssetGroupsSchema = z
+  .array(PmaxAssetGroupSchema)
+  .min(1, "At least 1 asset group")
+  .max(3, "Max 3 asset groups per PMAX campaign (autopilot v1)");
 
 // SEARCH budget + bidding.
 export const SearchBudgetSchema = z
@@ -218,14 +282,29 @@ export const Step5AssetsSchema = z.object({
 });
 
 // Combined per-step schemas for the channel-aware wizard.
+//
+// Copy can land in one of two shapes per channel:
+//   SEARCH:
+//     • `searchAdCopy`     — legacy single-ad-group (the wizard still uses this)
+//     • `searchAdGroups`   — Phase A5 multi-ad-group (the /app/create autopilot)
+//   PMAX:
+//     • `pmaxAdCopy`       — legacy single-asset-group (the wizard still uses this)
+//     • `pmaxAssetGroups`  — Phase A5 multi-asset-group (autopilot)
+// At least one shape must be present per channel.
 export const Step3Schema = z.object({
   channel: z.enum(CHANNELS),
   searchAdCopy: SearchAdCopySchema.optional(),
+  searchAdGroups: SearchAdGroupsSchema.optional(),
   pmaxAdCopy: PmaxAdCopySchema.optional(),
+  pmaxAssetGroups: PmaxAssetGroupsSchema.optional(),
 }).refine(
   (d) =>
-    (d.channel === "SEARCH" && d.searchAdCopy) ||
-    (d.channel === "PMAX" && d.pmaxAdCopy),
+    (d.channel === "SEARCH" &&
+      (d.searchAdCopy ||
+        (d.searchAdGroups && d.searchAdGroups.length > 0))) ||
+    (d.channel === "PMAX" &&
+      (d.pmaxAdCopy ||
+        (d.pmaxAssetGroups && d.pmaxAssetGroups.length > 0))),
   {
     message: "Ad copy doesn't match the chosen channel",
     path: ["channel"],
@@ -285,12 +364,14 @@ export function emptyDraft(): CampaignDraft {
       keywords: [],
       negativeKeywords: [],
     },
+    searchAdGroups: undefined,
     pmaxAdCopy: {
       headlines: [],
       longHeadlines: [],
       descriptions: [],
       businessName: "",
     },
+    pmaxAssetGroups: undefined,
     searchBudget: {
       dailyUsd: 10,
       biddingStrategy: "MAXIMIZE_CLICKS",

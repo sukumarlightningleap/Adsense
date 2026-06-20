@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, HeartPulse, Megaphone } from "lucide-react";
+import { ArrowLeft, HeartPulse, Megaphone, Target } from "lucide-react";
 
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
@@ -124,13 +124,26 @@ export default async function AccountDetailPage({
         </div>
         <div className="flex flex-wrap gap-2">
           {!account.demoMode && (
-            <Button
-              variant="outline"
-              render={<Link href={`/app/accounts/${account.id}/health`} />}
-            >
-              <HeartPulse />
-              Health
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                render={
+                  <Link
+                    href={`/app/accounts/${account.id}/conversion-tracking`}
+                  />
+                }
+              >
+                <Target />
+                Tracking
+              </Button>
+              <Button
+                variant="outline"
+                render={<Link href={`/app/accounts/${account.id}/health`} />}
+              >
+                <HeartPulse />
+                Health
+              </Button>
+            </>
           )}
           <Button
             variant="outline"

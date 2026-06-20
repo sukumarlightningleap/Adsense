@@ -29,6 +29,72 @@ export type SetStatusResult =
   | { ok: false; error: string };
 
 /**
+ * Mutate a PMAX asset-group's status in Google Ads + mirror in our DB.
+ * Asset groups use the same ENABLED / PAUSED / REMOVED enum as ad
+ * groups (Google's `AssetGroupStatus`).
+ */
+export async function setAssetGroupStatus(opts: {
+  assetGroupId: string;        // our DB id
+  newStatus: "ENABLED" | "PAUSED" | "REMOVED";
+  userId?: string;
+  auditAction?: string;
+  auditExtras?: Record<string, unknown>;
+}): Promise<SetStatusResult> {
+  const assetGroup = await db.assetGroup.findFirst({
+    where: { id: opts.assetGroupId },
+    include: { campaign: { include: { account: true } } },
+  });
+  if (!assetGroup) return { ok: false, error: "Asset group not found." };
+  if (opts.userId && assetGroup.campaign.account.userId !== opts.userId) {
+    return { ok: false, error: "Not your asset group." };
+  }
+  if (!assetGroup.providerAssetGroupId) {
+    return {
+      ok: false,
+      error: "Asset group has no provider ID — never launched to Google.",
+    };
+  }
+
+  const customer = buildCustomerForAccount(assetGroup.campaign.account);
+  const customerIdNum = assetGroup.campaign.account.customerId.replace(/-/g, "");
+  const resourceName = `customers/${customerIdNum}/assetGroups/${assetGroup.providerAssetGroupId}`;
+
+  try {
+    await customer.assetGroups.update([
+      { resource_name: resourceName, status: opts.newStatus },
+    ]);
+  } catch (e) {
+    return { ok: false, error: extractGoogleError(e) };
+  }
+
+  await db.assetGroup.update({
+    where: { id: assetGroup.id },
+    data: { status: opts.newStatus },
+  });
+
+  await db.auditLog.create({
+    data: {
+      userId: opts.userId ?? null,
+      action: opts.auditAction ?? "asset_group.status_change",
+      targetKind: "asset_group",
+      targetId: assetGroup.id,
+      payload: {
+        previousStatus: assetGroup.status,
+        newStatus: opts.newStatus,
+        providerAssetGroupId: assetGroup.providerAssetGroupId,
+        ...(opts.auditExtras ?? {}),
+      },
+    },
+  });
+
+  return {
+    ok: true,
+    previousStatus: assetGroup.status,
+    newStatus: opts.newStatus,
+  };
+}
+
+/**
  * Mutate an ad-group's status in Google Ads + mirror in our DB.
  * Used by the optimizer (Phase 10) to auto-pause bleeders, and by
  * future per-ad-group UI controls.

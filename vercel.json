@@ -8,6 +8,14 @@
     {
       "path": "/api/cron/deliver-notifications",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/upload-offline-conversions",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/poll-crm-connections",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

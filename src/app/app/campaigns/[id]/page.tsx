@@ -21,6 +21,10 @@ import { TrendChart } from "../../_components/trend-chart";
 import { LaunchCard } from "./launch-card";
 import { PmaxSections } from "./pmax-sections";
 import { StatusControls } from "./status-controls";
+import {
+  ImportedAdGroupsSection,
+  ImportedAssetGroupsSection,
+} from "./imported-groups";
 
 export async function generateMetadata({
   params,
@@ -56,7 +60,7 @@ export default async function CampaignDetailPage({
   });
   if (!campaign) notFound();
 
-  const [summary, trend] = await Promise.all([
+  const [summary, trend, adGroupRows, assetGroupRows] = await Promise.all([
     getKpiSummary({
       userId: user.id,
       demoMode,
@@ -69,6 +73,37 @@ export default async function CampaignDetailPage({
       campaignId: id,
       windowDays: 14,
     }),
+    // Phase A5 + Phase 8a — pull imported / created ad groups for SEARCH.
+    campaign.channelType === "SEARCH"
+      ? db.adGroup.findMany({
+          where: { campaignId: id },
+          select: {
+            id: true,
+            name: true,
+            themeLabel: true,
+            status: true,
+            providerAdGroupId: true,
+            source: true,
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : Promise.resolve([]),
+    // Same for PMAX asset groups.
+    campaign.channelType === "PMAX"
+      ? db.assetGroup.findMany({
+          where: { campaignId: id },
+          select: {
+            id: true,
+            name: true,
+            themeLabel: true,
+            status: true,
+            providerAssetGroupId: true,
+            finalUrl: true,
+            source: true,
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -235,35 +270,36 @@ export default async function CampaignDetailPage({
           </section>
         )}
 
-      {/* PMAX-specific sub-resources: asset group + ad copy +
-          conversion-tracking notice. For SEARCH we keep the placeholder
-          tiles below. */}
+      {/* SEARCH — imported / created ad groups with per-group control.
+          Lets imported customers (Ballast, Blue Balloon, …) RESUME
+          their existing Google Ads work from inside Adsense. */}
+      {campaign.channelType === "SEARCH" && (
+        <ImportedAdGroupsSection
+          campaignId={campaign.id}
+          adGroups={adGroupRows}
+          readOnly={campaign.demoMode}
+        />
+      )}
+
+      {/* PMAX — imported / created asset groups with per-group control. */}
+      {campaign.channelType === "PMAX" && (
+        <ImportedAssetGroupsSection
+          campaignId={campaign.id}
+          assetGroups={assetGroupRows.map((g) => ({
+            ...g,
+            finalUrl: g.finalUrl ?? null,
+          }))}
+          readOnly={campaign.demoMode}
+        />
+      )}
+
+      {/* PMAX-specific launch preview — still useful for unlaunched
+          campaigns to see the planned asset group + ad copy before push. */}
       {campaign.channelType === "PMAX" && campaign.payloadJson != null && (
         <PmaxSections
           payload={campaign.payloadJson as PmaxLaunchPayload}
           alreadyLaunched={!!campaign.providerCampaignId}
         />
-      )}
-
-      {/* SEARCH sub-resources placeholder */}
-      {campaign.channelType === "SEARCH" && (
-        <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <SubCard
-          title="Ad groups"
-          count="—"
-          body="Multi-ad-group support arrives with the campaign create wizard (Phase 3) and full launch port (Phase 4)."
-        />
-        <SubCard
-          title="Ads"
-          count="—"
-          body="Responsive search ads, image ads, and Performance Max asset groups will live here."
-        />
-        <SubCard
-          title="Keywords"
-          count="—"
-          body="Positive and negative keywords surface in Phase 3 along with the keyword theme editor."
-        />
-        </section>
       )}
 
       {/* YAML payload (if any) */}
@@ -326,30 +362,6 @@ function MetaTile({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="mt-1 truncate text-[14px] font-medium">{value}</div>
-    </div>
-  );
-}
-
-function SubCard({
-  title,
-  count,
-  body,
-}: {
-  title: string;
-  count: string;
-  body: string;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-card/50 p-5">
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-[14px] font-semibold tracking-tight">{title}</h3>
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {count}
-        </span>
-      </div>
-      <p className="mt-2 text-[12.5px] leading-5 text-muted-foreground">
-        {body}
-      </p>
     </div>
   );
 }

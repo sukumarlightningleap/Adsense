@@ -168,12 +168,16 @@ model AdsAccount {
   ///                     emit a notification announcing what was done
   optimizationMode   String    @default("review_first") @map("optimization_mode")
 
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  campaigns          Campaign[]
-  assets             Asset[]             @relation("AssetAccount")
-  benchmarkSnapshots BenchmarkSnapshot[]
-  ga4Link            Ga4LinkStatus?
-  conversionActions  ConversionAction[]
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns           Campaign[]
+  assets              Asset[]                    @relation("AssetAccount")
+  benchmarkSnapshots  BenchmarkSnapshot[]
+  ga4Link             Ga4LinkStatus?
+  ga4OauthConnection  Ga4OAuthConnection?
+  conversionActions   ConversionAction[]
+  pendingConversions  PendingOfflineConversion[]
+  crmWebhookConfigs   CrmWebhookConfig[]
+  crmOauthConnections CrmOAuthConnection[]
 
   @@unique([userId, provider, customerId], name: "uq_account_user_provider_customer")
   @@index([userId])
@@ -201,19 +205,25 @@ model Campaign {
   launchedAt          DateTime?      @map("launched_at")
   /// `created` = built in our app, `imported` = mirrored from Google.
   source              Source         @default(created)
+  /// Phase B3 — the ConversionAction this campaign optimizes for. The
+  /// bidding strategy is gated on this row's health (working / stale /
+  /// broken). NULL is allowed (legacy + freshly-imported campaigns).
+  primaryConversionActionId String?  @map("primary_conversion_action_id")
   demoMode            Boolean        @default(false) @map("demo_mode")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
-  account        AdsAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  dailyKpis      DailyKpi[]
-  campaignAssets CampaignAsset[]
-  adGroups       AdGroup[]
-  assetGroups    AssetGroup[]
+  account                  AdsAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  dailyKpis                DailyKpi[]
+  campaignAssets           CampaignAsset[]
+  adGroups                 AdGroup[]
+  assetGroups              AssetGroup[]
+  primaryConversionAction  ConversionAction? @relation("CampaignPrimaryGoal", fields: [primaryConversionActionId], references: [id], onDelete: SetNull)
 
   @@index([accountId])
   @@index([providerCampaignId])
   @@index([demoMode])
+  @@index([primaryConversionActionId])
   @@map("campaigns")
 }
 
@@ -342,15 +352,200 @@ model ConversionAction {
   lastConversionAt         DateTime?           @map("last_conversion_at")
   /// Conversion count over a recent rolling window (filled by sync).
   recentConversions        Int?                @map("recent_conversions")
+  /// Phase B2 — user attests they've pasted the snippet on their site
+  /// (before Google has actually seen the first fire). Lets Create-form
+  /// unlock conversion-based bidding in 'learning' mode for net-new
+  /// actions that have no `lastConversionAt` yet.
+  tagInstalled             Boolean             @default(false) @map("tag_installed")
   source                   Source              @default(imported)
   createdAt                DateTime            @default(now()) @map("created_at")
   updatedAt                DateTime            @updatedAt @map("updated_at")
 
-  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account             AdsAccount                  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campaignsAsPrimary  Campaign[]                  @relation("CampaignPrimaryGoal")
+  pendingConversions  PendingOfflineConversion[]
+  crmConfigs          CrmWebhookConfig[]          @relation("CrmFeedAction")
 
   @@index([accountId])
   @@index([providerConversionId])
   @@map("conversion_actions")
+}
+
+// ---------------------------------------------------------------------------
+// PendingOfflineConversion — queue of offline conversions awaiting upload
+// to Google via `ConversionUploadService.uploadClickConversions`.
+//
+// Sources (Phase B6/B8):
+//   - 'hubspot' / 'pipedrive' / 'zoho' — pushed in by the webhook receiver
+//     when a CRM deal stage matches the configured trigger
+//   - 'csv' — bulk CSV upload from the customer
+//   - 'manual' — operator entry (debug / one-off)
+//
+// The cron `/api/cron/upload-offline-conversions` batches `pending` rows
+// per (account, conversion action) and uploads them. Status flips to
+// `uploaded` (with `uploadedAt`) or `failed` (with `lastError` + retry).
+// Dedup key = (accountId, source, externalId) — prevents the same CRM
+// deal-stage-change webhook from firing the same conversion twice.
+// ---------------------------------------------------------------------------
+model PendingOfflineConversion {
+  id                 String   @id @default(cuid())
+  accountId          String   @map("account_id")
+  conversionActionId String   @map("conversion_action_id")
+
+  /// Google's ad-click identifier. Required unless we someday support
+  /// Enhanced Conversions for Leads (email/phone match) — for now,
+  /// rows without a gclid are rejected at intake.
+  gclid              String?
+  /// iOS Safari / web-to-app alternatives. Only one of gclid/gbraid/wbraid
+  /// needs to be set per row.
+  gbraid             String?
+  wbraid             String?
+
+  conversionDateTime DateTime @map("conversion_date_time")
+  valueMicros        BigInt?  @map("value_micros")
+  currencyCode       String?  @map("currency_code")
+  /// Order ID for purchase-style conversions (helps Google dedupe at their end).
+  orderId            String?  @map("order_id")
+
+  /// 'hubspot' | 'pipedrive' | 'zoho' | 'csv' | 'manual' | 'ga4_offline'
+  source             String
+  /// Foreign-system unique ID (e.g. HubSpot deal ID) — used for dedupe.
+  externalId         String?  @map("external_id")
+
+  status             String   @default("pending") // pending | uploaded | failed
+  attempts           Int      @default(0)
+  lastError          String?  @map("last_error")
+  uploadedAt         DateTime? @map("uploaded_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  account          AdsAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  conversionAction ConversionAction @relation(fields: [conversionActionId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, source, externalId], name: "uq_offline_dedupe")
+  @@index([accountId, status])
+  @@index([conversionActionId])
+  @@index([status])
+  @@map("pending_offline_conversions")
+}
+
+// ---------------------------------------------------------------------------
+// CrmWebhookConfig — per-account secret used to authenticate incoming
+// webhook POSTs from CRMs. We give each account a unique secret that
+// the customer pastes into HubSpot / Pipedrive / Zoho webhook config.
+//
+// One row per account per source. The `secret` is a 32-byte random hex
+// string. We also store which ConversionAction this CRM source feeds
+// into so the webhook body doesn't need to reference our internal IDs.
+// ---------------------------------------------------------------------------
+model CrmWebhookConfig {
+  id                 String   @id @default(cuid())
+  accountId          String   @map("account_id")
+  /// 'hubspot' | 'pipedrive' | 'zoho'
+  source             String
+  /// 32-byte hex string. Required as `X-Adsense-Webhook-Secret` header.
+  secret             String
+  /// Default ConversionAction the webhook fires (customer picks at
+  /// connection time). Nullable so the row can be created before the
+  /// customer chooses, but cron rejects rows that hit a NULL config.
+  conversionActionId String?  @map("conversion_action_id")
+  /// JSON-encoded mapping rules (e.g. {dealStage: "Proposal Sent"}).
+  rules              Json?
+  /// Last time we successfully received a webhook fire on this config.
+  lastFireAt         DateTime? @map("last_fire_at")
+  fireCount          Int      @default(0) @map("fire_count")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  account          AdsAccount        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  conversionAction ConversionAction? @relation("CrmFeedAction", fields: [conversionActionId], references: [id], onDelete: SetNull)
+
+  @@unique([accountId, source], name: "uq_crm_per_source")
+  @@index([accountId])
+  @@map("crm_webhook_configs")
+}
+
+// ---------------------------------------------------------------------------
+// CrmOAuthConnection — Phase B6.1 (OAuth-based CRM integration).
+//
+// Adds the OAuth alternative to the manual-webhook flow in
+// CrmWebhookConfig. OAuth lets us READ pipeline state from the CRM
+// (list pipelines, list stages, list recently-updated deals) rather
+// than relying on the customer to configure outbound webhooks.
+//
+// One row per (account × provider). The token vault encrypts both
+// access + refresh tokens at rest (AES-256-GCM via token-vault.ts).
+// ---------------------------------------------------------------------------
+model CrmOAuthConnection {
+  id                    String   @id @default(cuid())
+  accountId             String   @map("account_id")
+  /// 'hubspot' | 'pipedrive' | 'zoho'
+  provider              String
+
+  /// AES-256-GCM encrypted access token.
+  encryptedAccessToken  String   @map("encrypted_access_token")
+  /// Refresh token (encrypted). Some providers don't return one; we
+  /// then have to re-OAuth when the access token expires.
+  encryptedRefreshToken String?  @map("encrypted_refresh_token")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  scope                 String?
+
+  /// Zoho only: 'us' | 'eu' | 'in' | 'au' | 'jp' (drives API base URL).
+  region                String?
+  /// Provider-side identifier (HubSpot portal_id / Pipedrive company_id /
+  /// Zoho org_id) so we know WHICH account this connection is on the
+  /// CRM side without an extra round-trip.
+  providerAccountId     String?  @map("provider_account_id")
+
+  /// Cron-driven polling state. `lastDealUpdatedAt` is the watermark —
+  /// next poll asks "deals updated since this timestamp".
+  lastPolledAt          DateTime? @map("last_polled_at")
+  lastDealUpdatedAt     DateTime? @map("last_deal_updated_at")
+  lastPollError         String?   @map("last_poll_error")
+
+  /// Which pipeline stages we treat as conversion triggers, mapped
+  /// stage→conversionActionId. Shape: { "<stage_id>": "<our action id>" }.
+  /// When a deal's stage matches a key, we enqueue against that action.
+  stageRules            Json?     @map("stage_rules")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, provider], name: "uq_crm_oauth_per_provider")
+  @@index([accountId])
+  @@map("crm_oauth_connections")
+}
+
+// ---------------------------------------------------------------------------
+// Ga4OAuthConnection — Phase B5.1.
+//
+// Stores OAuth tokens for the Google Analytics Admin API
+// (`https://www.googleapis.com/auth/analytics.readonly`). Used by the
+// GA4-import flow to list properties + key events without making the
+// customer paste IDs by hand.
+//
+// Reuses the same AES-256-GCM token vault as Google Ads + CRM OAuth.
+// One connection per AdsAccount.
+// ---------------------------------------------------------------------------
+model Ga4OAuthConnection {
+  id                    String   @id @default(cuid())
+  accountId             String   @unique @map("account_id")
+
+  encryptedAccessToken  String   @map("encrypted_access_token")
+  encryptedRefreshToken String?  @map("encrypted_refresh_token")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  scope                 String?
+  /// Email of the Google user who completed the OAuth flow (shown
+  /// in the UI as "Connected as foo@bar.com").
+  oauthEmail            String?  @map("oauth_email")
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("ga4_oauth_connections")
 }
 
 // ---------------------------------------------------------------------------

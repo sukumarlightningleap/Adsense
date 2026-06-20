@@ -61,18 +61,43 @@ export async function launchSearchCampaign(args: {
   );
   const campaignId = campaignResourceName.split("/").pop()!;
 
-  // 3. Ad group
-  const adGroupResourceName = await createAdGroup(
-    customer,
-    payload,
-    campaignResourceName,
-  );
-
-  // 4. Responsive Search Ad
-  await createResponsiveSearchAd(customer, payload, adGroupResourceName);
-
-  // 5. Keywords (positive + negative, batched)
-  await createKeywords(customer, payload, adGroupResourceName);
+  // 3-5. Ad groups + ads + keywords. Two branches:
+  //   • payload.ad_groups present → Phase A5 multi-ad-group flow
+  //   • otherwise                 → legacy single-ad-group flow
+  let adGroupCount = 1;
+  if (payload.ad_groups && payload.ad_groups.length > 0) {
+    adGroupCount = payload.ad_groups.length;
+    for (const cluster of payload.ad_groups) {
+      const agRn = await createAdGroupNamed({
+        customer,
+        payload,
+        campaignResourceName,
+        nameSuffix: cluster.theme_label,
+      });
+      await createResponsiveSearchAdFor({
+        customer,
+        adGroupResourceName: agRn,
+        finalUrl: payload.book.landing_page_url,
+        headlines: cluster.headlines,
+        descriptions: cluster.descriptions,
+      });
+      await createKeywordsFor({
+        customer,
+        adGroupResourceName: agRn,
+        positive: cluster.keywords,
+        negative: cluster.negative_keywords ?? [],
+      });
+    }
+  } else {
+    // Legacy single-ad-group flow — unchanged
+    const adGroupResourceName = await createAdGroup(
+      customer,
+      payload,
+      campaignResourceName,
+    );
+    await createResponsiveSearchAd(customer, payload, adGroupResourceName);
+    await createKeywords(customer, payload, adGroupResourceName);
+  }
 
   // 6. Geo criteria
   await createGeoCriteria(customer, campaignResourceName, geoConstants);
@@ -81,8 +106,98 @@ export async function launchSearchCampaign(args: {
     providerCampaignId: campaignId,
     resourceName: campaignResourceName,
     status: "PAUSED",
-    operations: summarize(payload, geoConstants.length),
+    operations: summarize(payload, geoConstants.length, adGroupCount),
   };
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Named ad group (Phase A5) — version that takes a cluster name
+// suffix so each cluster gets its own AdGroup like
+// "Ikigai · Branded AdGroup".
+// ---------------------------------------------------------------------------
+async function createAdGroupNamed(args: {
+  customer: Customer;
+  payload: SearchLaunchPayload;
+  campaignResourceName: string;
+  nameSuffix: string;
+}): Promise<string> {
+  const { customer, payload, campaignResourceName, nameSuffix } = args;
+  const title = (payload.book.title || "Untitled").slice(0, 30);
+  const cpcMicros = Math.round(
+    (payload.budget.max_cpc_usd ?? 1.0) * 1_000_000,
+  );
+  const safeSuffix = nameSuffix.slice(0, 30).replace(/[^\w\s\-·]/g, "");
+  const result = await customer.adGroups.create([
+    {
+      name: `${title} · ${safeSuffix}`.slice(0, 60),
+      campaign: campaignResourceName,
+      status: enums.AdGroupStatus.ENABLED,
+      type: enums.AdGroupType.SEARCH_STANDARD,
+      cpc_bid_micros: cpcMicros,
+    },
+  ]);
+  const rn = result.results[0]?.resource_name;
+  if (!rn) throw new Error("Failed to create AdGroup");
+  return rn;
+}
+
+// ---------------------------------------------------------------------------
+// 4b. RSA for a specific cluster (takes inline copy instead of pulling
+// from the global payload.ad_copy).
+// ---------------------------------------------------------------------------
+async function createResponsiveSearchAdFor(args: {
+  customer: Customer;
+  adGroupResourceName: string;
+  finalUrl: string;
+  headlines: string[];
+  descriptions: string[];
+}): Promise<string> {
+  const { customer, adGroupResourceName, finalUrl } = args;
+  const headlines = args.headlines
+    .slice(0, 15)
+    .map((text) => ({ text: text.slice(0, 30) }));
+  const descriptions = args.descriptions
+    .slice(0, 4)
+    .map((text) => ({ text: text.slice(0, 90) }));
+  const result = await customer.adGroupAds.create([
+    {
+      ad_group: adGroupResourceName,
+      status: enums.AdGroupAdStatus.ENABLED,
+      ad: {
+        final_urls: [finalUrl],
+        responsive_search_ad: { headlines, descriptions },
+      },
+    },
+  ]);
+  const rn = result.results[0]?.resource_name;
+  if (!rn) throw new Error("Failed to create ResponsiveSearchAd");
+  return rn;
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Keywords for a specific cluster (takes inline positive + negative
+// lists). One batched mutate per cluster.
+// ---------------------------------------------------------------------------
+async function createKeywordsFor(args: {
+  customer: Customer;
+  adGroupResourceName: string;
+  positive: string[];
+  negative: string[];
+}): Promise<void> {
+  const positive = args.positive.map((kw) => ({
+    ad_group: args.adGroupResourceName,
+    status: enums.AdGroupCriterionStatus.ENABLED,
+    keyword: { text: kw, match_type: enums.KeywordMatchType.BROAD },
+  }));
+  const negative = args.negative.map((kw) => ({
+    ad_group: args.adGroupResourceName,
+    status: enums.AdGroupCriterionStatus.ENABLED,
+    negative: true,
+    keyword: { text: kw, match_type: enums.KeywordMatchType.BROAD },
+  }));
+  const all = [...positive, ...negative];
+  if (all.length === 0) return;
+  await args.customer.adGroupCriteria.create(all);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +411,7 @@ function randomToken(bytes: number): string {
 function summarize(
   payload: SearchLaunchPayload,
   geoCount: number,
+  adGroupCount: number = 1,
 ): OperationSummary[] {
   return [
     { type: "CampaignBudget", detail: { daily_usd: payload.budget.daily_usd } },
@@ -308,7 +424,14 @@ function summarize(
         bidding: payload.budget.bidding_strategy,
       },
     },
-    { type: "AdGroup", detail: { name: payload.book.title } },
+    {
+      type: "AdGroup",
+      detail: {
+        count: adGroupCount,
+        labels:
+          payload.ad_groups?.map((g) => g.theme_label) ?? [payload.book.title],
+      },
+    },
     {
       type: "ResponsiveSearchAd",
       detail: {

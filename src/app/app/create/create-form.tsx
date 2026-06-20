@@ -16,24 +16,24 @@
  *     created as PAUSED, redirect to detail page where LaunchCard
  *     pushes to Google
  */
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CheckCircle2,
-  Globe,
+  Clock,
+  ExternalLink,
+  HelpCircle,
   ImageIcon,
-  Layers,
   MessageCircle,
-  Phone,
   Plus,
   RefreshCw,
   Rocket,
-  ShieldCheck,
   Sparkles,
+  Star,
   Target,
-  Users,
   Wand2,
+  XCircle,
   Zap,
 } from "lucide-react";
 
@@ -42,8 +42,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type {
-  GeneratedPmaxCopy,
-  GeneratedSearchCopy,
+  PmaxAssetGroupCluster,
+  ThemeCluster,
 } from "@/lib/ai/types";
 import type { GeneratedAssetIds, PipelineMode } from "@/lib/ai/pipeline";
 import {
@@ -52,36 +52,32 @@ import {
 } from "@/lib/wizard/schema";
 
 import {
+  DiscoverCardMockup,
+  DisplayBannerMockup,
+  SearchSerpMockup,
+} from "./mockups";
+
+import {
   generateImagesAction,
   launchCampaignFromCreate,
+  listConversionActionsForAccount,
   planAndGenerateCopy,
   regenerateCopy,
   type BiddingStrategyInput,
-  type ConversionTrackingInput,
+  type ConversionActionOption,
   type CreateBrief,
   type LaunchableAccount,
   type PlanAndGenerateResult,
 } from "./actions";
 
 // ---------------------------------------------------------------------------
-// A6: Conversion tracking shape — UI choices.
+// B3 — Conversion tracking on Create-form is now a PICKER over the
+// account's existing ConversionAction rows (imported + created from
+// our Hub at /app/accounts/[id]/conversion-tracking). The old self-
+// attestation form (mode + events + value + checkbox) is removed.
+// ConversionTrackingInput is kept imported so the launch payload can
+// continue to carry the audit snapshot.
 // ---------------------------------------------------------------------------
-type TrackingMode = ConversionTrackingInput["mode"];
-type EventKey =
-  | "form_submit"
-  | "page_view_thanks"
-  | "phone_call_30s"
-  | "add_to_cart"
-  | "purchase"
-  | "whatsapp_click";
-const EVENT_LABELS: Record<EventKey, string> = {
-  form_submit: "Form submission",
-  page_view_thanks: "Page view on /thanks",
-  phone_call_30s: "Phone call > 30s",
-  add_to_cart: "Add to cart",
-  purchase: "Purchase completed",
-  whatsapp_click: "WhatsApp click",
-};
 
 // ---------------------------------------------------------------------------
 // A7: Bidding strategy — channel-aware option lists. Some options are
@@ -138,20 +134,49 @@ type Channel = "SEARCH" | "PMAX";
 type EditableList = Array<{ text: string; edited: boolean }>;
 type EditableField = { text: string; edited: boolean };
 
-type DraftCopy = {
-  channel: Channel;
-  brandName: EditableField;
+/**
+ * One editable SEARCH theme cluster (Phase A5). Each becomes an AdGroup
+ * on Google at launch time.
+ */
+type EditableCluster = {
+  themeLabel: string;
+  intent: string;
+  headlines: EditableList;
+  descriptions: EditableList;
+  keywords: EditableList;
+};
+
+/**
+ * One editable PMAX asset-group cluster (Phase A5). Each becomes an
+ * AssetGroup on Google at launch time. No keywords (PMAX doesn't use
+ * them). Business name is per-cluster — usually identical across, but
+ * the user can vary it.
+ */
+type EditablePmaxCluster = {
+  themeLabel: string;
+  intent: string;
   businessName: EditableField;
   headlines: EditableList;
   longHeadlines: EditableList;
   descriptions: EditableList;
-  keywords: EditableList;
+};
+
+type DraftCopy = {
+  channel: Channel;
+  brandName: EditableField;
+  /** SEARCH only — Phase A5 multi-ad-group cards. */
+  clusters: EditableCluster[];
+  /** PMAX only — Phase A5 multi-asset-group cards. */
+  pmaxClusters: EditablePmaxCluster[];
 };
 
 export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
   const router = useRouter();
 
   // -------- Widget brief inputs ------------------------------------------
+  // Landing page URL moved out of the widget bar — it's a "you decide"
+  // field (lives in Bucket 3 below) rather than something the architect
+  // needs to start working. Copy + images can generate without it.
   const [brandName, setBrandName] = useState("");
   const [productDescription, setProductDescription] = useState("");
   const [landingPageUrl, setLandingPageUrl] = useState("");
@@ -179,16 +204,73 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
   const [accountId, setAccountId] = useState<string>(accounts[0]?.id ?? "");
   const [dailyBudgetUsd, setDailyBudgetUsd] = useState<number>(10);
 
-  // -------- A6 Conversion tracking --------------------------------------
-  const [trackingMode, setTrackingMode] = useState<TrackingMode | null>(null);
-  const [trackingEvents, setTrackingEvents] = useState<Set<EventKey>>(
-    new Set(["form_submit"]),
+  // -------- B3 Conversion tracking (real picker over imported + created
+  //          actions). Replaces A6's self-attestation gate. ---------------
+  const [conversionActions, setConversionActions] = useState<
+    ConversionActionOption[]
+  >([]);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [primaryActionId, setPrimaryActionId] = useState<string | null>(null);
+
+  // Re-fetch the chosen account's conversion actions whenever the user
+  // switches accounts. Empty list when accountId is unset. All
+  // setState calls live inside an async chain to satisfy React 19's
+  // set-state-in-effect lint (no sync setState inside the effect body).
+  useEffect(() => {
+    let cancelled = false;
+    const fetcher = accountId
+      ? listConversionActionsForAccount(accountId)
+      : Promise.resolve([] as ConversionActionOption[]);
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      setTrackingLoading(!!accountId);
+    });
+    fetcher
+      .then((rows) => {
+        if (cancelled) return;
+        setConversionActions(rows);
+        // Auto-pick: prefer the working primary, else the first working
+        // action, else any enabled, else null (forces MAX_CLICKS).
+        const workingPrimary = rows.find(
+          (r) => r.isPrimary && r.health === "working" && r.status === "ENABLED",
+        );
+        const anyWorking = rows.find(
+          (r) => r.health === "working" && r.status === "ENABLED",
+        );
+        const anyEnabled = rows.find((r) => r.status === "ENABLED");
+        setPrimaryActionId(
+          workingPrimary?.id ?? anyWorking?.id ?? anyEnabled?.id ?? null,
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setTrackingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  // Derive: is the picked action "ready enough" for conversion-based
+  // bidding? The two readiness modes:
+  //   - 'ready'   → fired in last 30 days OR (newly created AND tag
+  //                 attested as installed). Full bidding unlocked.
+  //   - 'learning'→ has a primary but no fire data yet. Conversion-based
+  //                 bidding still allowed but with a warning.
+  //   - 'blocked' → no primary picked, or primary is broken / has no
+  //                 tag installed / has never fired. Only MAX_CLICKS.
+  const primaryAction = useMemo(
+    () => conversionActions.find((c) => c.id === primaryActionId) ?? null,
+    [conversionActions, primaryActionId],
   );
-  const [trackingValueType, setTrackingValueType] = useState<
-    ConversionTrackingInput["valueType"]
-  >("count-only");
-  const [trackingValueAmount, setTrackingValueAmount] = useState<number>(0);
-  const [trackingValidated, setTrackingValidated] = useState(false);
+  const trackingReadiness: "ready" | "learning" | "blocked" = useMemo(() => {
+    if (!primaryAction) return "blocked";
+    if (primaryAction.status !== "ENABLED") return "blocked";
+    if (primaryAction.health === "working" || primaryAction.health === "stale")
+      return "ready";
+    if (primaryAction.health === "broken") return "blocked";
+    // inactive — never fired
+    return primaryAction.tagInstalled ? "learning" : "blocked";
+  }, [primaryAction]);
 
   // -------- A7 Bidding strategy ----------------------------------------
   const [biddingStrategyId, setBiddingStrategyId] =
@@ -204,15 +286,16 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
   const [launching, startLaunch] = useTransition();
   const [launchError, setLaunchError] = useState<string | null>(null);
 
-  // A7: filter bidding options by channel; lock conversion-based ones
-  // when tracking isn't declared-validated.
+  // A7+B3: filter bidding options by channel; lock conversion-based ones
+  // unless the picked primary action is at least in 'learning' state.
   const biddingOptions = useMemo(() => {
     const base = channel === "PMAX" ? PMAX_BIDDING_OPTIONS : SEARCH_BIDDING_OPTIONS;
+    const allowConversionBased = trackingReadiness !== "blocked";
     return base.map((opt) => ({
       ...opt,
-      enabled: opt.requiresTracking ? trackingValidated : true,
+      enabled: opt.requiresTracking ? allowConversionBased : true,
     }));
-  }, [channel, trackingValidated]);
+  }, [channel, trackingReadiness]);
 
   // Auto-revert to the safest enabled bidding option if the user's
   // current pick becomes locked (e.g. they toggled off the validated
@@ -234,6 +317,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
   const canLaunch =
     !!draft &&
     !!accountId &&
+    !!landingPageUrl.trim() &&
     dailyBudgetUsd >= 1 &&
     !launching;
 
@@ -257,7 +341,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
         return;
       }
       setPlan(res.plan);
-      setDraft(buildDraftFromCopy(res.copy, brandName));
+      setDraft(buildDraftFromCopy(res.result, brandName));
     });
   }
 
@@ -271,7 +355,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
         return;
       }
       setDraft((prev) =>
-        prev ? mergePreservingEdits(prev, res.copy) : null,
+        prev ? mergePreservingEdits(prev, res.result) : null,
       );
     });
   }
@@ -311,8 +395,8 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
       setPlan(res.plan);
       setDraft((prev) =>
         prev
-          ? mergePreservingEdits(prev, res.copy)
-          : buildDraftFromCopy(res.copy, brandName),
+          ? mergePreservingEdits(prev, res.result)
+          : buildDraftFromCopy(res.result, brandName),
       );
       setRefinement("");
     });
@@ -330,43 +414,69 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
         audience: { country },
         ...(channel === "SEARCH"
           ? {
-              search: {
-                headlines: draft.headlines
-                  .map((h) => h.text.trim())
-                  .filter(Boolean),
-                descriptions: draft.descriptions
-                  .map((d) => d.text.trim())
-                  .filter(Boolean),
-                keywords: draft.keywords
-                  .map((k) => k.text.trim())
-                  .filter(Boolean),
-              },
+              // Phase A5 — pass clusters as-is. Each becomes an AdGroup
+              // on Google with its own RSA + keyword set.
+              searchClusters: draft.clusters
+                .map((c) => ({
+                  themeLabel: c.themeLabel,
+                  intent: c.intent,
+                  headlines: c.headlines
+                    .map((h) => h.text.trim())
+                    .filter(Boolean),
+                  descriptions: c.descriptions
+                    .map((d) => d.text.trim())
+                    .filter(Boolean),
+                  keywords: c.keywords
+                    .map((k) => k.text.trim())
+                    .filter(Boolean),
+                }))
+                .filter(
+                  (c) =>
+                    c.headlines.length >= 3 &&
+                    c.descriptions.length >= 2 &&
+                    c.keywords.length >= 1,
+                ),
             }
           : {
-              pmax: {
-                headlines: draft.headlines
-                  .map((h) => h.text.trim())
-                  .filter(Boolean),
-                longHeadlines: draft.longHeadlines
-                  .map((h) => h.text.trim())
-                  .filter(Boolean),
-                descriptions: draft.descriptions
-                  .map((d) => d.text.trim())
-                  .filter(Boolean),
-                businessName: draft.businessName.text.trim(),
-              },
+              // Phase A5 PMAX — pass clusters. Each becomes an AssetGroup
+              // on Google; images are shared across all groups.
+              pmaxClusters: draft.pmaxClusters
+                .map((c) => ({
+                  themeLabel: c.themeLabel,
+                  intent: c.intent,
+                  businessName: c.businessName.text.trim(),
+                  headlines: c.headlines
+                    .map((h) => h.text.trim())
+                    .filter(Boolean),
+                  longHeadlines: c.longHeadlines
+                    .map((h) => h.text.trim())
+                    .filter(Boolean),
+                  descriptions: c.descriptions
+                    .map((d) => d.text.trim())
+                    .filter(Boolean),
+                }))
+                .filter(
+                  (c) =>
+                    c.headlines.length >= 3 &&
+                    c.longHeadlines.length >= 1 &&
+                    c.descriptions.length >= 2 &&
+                    c.businessName.length >= 1,
+                ),
               assetIds: imageIds ?? undefined,
             }),
-        // A6: forward the user's conversion-tracking setup choices.
-        // Audit-logged; Phase 8c will wire the actual integrations.
-        conversionTracking: trackingMode
+        // B3: the picked primary conversion action (server validates the
+        // FK belongs to the account). NULL is allowed only when the
+        // bidding strategy is MAXIMIZE_CLICKS; the picker enforces this.
+        primaryConversionActionId: primaryActionId ?? undefined,
+        // A6: minimal snapshot kept for audit context. We no longer
+        // collect modes/events/valueType from the user here — the
+        // /accounts/[id]/conversion-tracking hub captures all of that.
+        conversionTracking: primaryAction
           ? {
-              mode: trackingMode,
-              events: Array.from(trackingEvents),
-              valueType: trackingValueType,
-              valueAmount:
-                trackingValueType === "fixed" ? trackingValueAmount : undefined,
-              declaredValidated: trackingValidated,
+              mode: "existing-site",
+              events: [],
+              valueType: "count-only",
+              declaredValidated: trackingReadiness !== "blocked",
             }
           : undefined,
         // A7: bidding strategy override (UI ensures this is valid per
@@ -384,16 +494,6 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
         return;
       }
       router.push(`/app/campaigns/${res.campaignId}`);
-    });
-  }
-
-  // A6: toggle an event in the tracking events set
-  function toggleEvent(key: EventKey) {
-    setTrackingEvents((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
     });
   }
 
@@ -415,10 +515,16 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
         </p>
       </header>
 
+      {/* Two-column layout:
+            Left  — widget bar + buckets + tracking + bidding + review/launch
+            Right — sticky live preview rail (appears after first generate)
+          Mobile collapses to a single column. */}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+        <div className="min-w-0">
       {/* Widget bar */}
       <form
         onSubmit={onSubmit}
-        className="mt-8 grid max-w-2xl gap-5 rounded-2xl border border-border bg-card p-6"
+        className="grid gap-5 rounded-2xl border border-border bg-card p-6"
       >
         <div className="flex items-center justify-between gap-3">
           <Label className="text-[13px] font-medium">
@@ -457,21 +563,6 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
           </span>
         </div>
 
-        <div className="grid gap-2">
-          <Label className="text-[13px] font-medium">
-            Landing page URL{" "}
-            <span className="text-muted-foreground">(optional)</span>
-          </Label>
-          <Input
-            type="url"
-            value={landingPageUrl}
-            onChange={(e) => setLandingPageUrl(e.target.value)}
-            placeholder="https://yourbrand.com/shop"
-            disabled={pending}
-            className="h-10"
-          />
-        </div>
-
         {error && (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
             {error}
@@ -499,7 +590,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
 
       {/* AUTO bucket — appears after first successful generate */}
       {draft && plan && (
-        <section className="mt-10 grid max-w-3xl gap-6">
+        <section className="mt-10 grid gap-6">
           {/* Plan badge + regenerate */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-gradient-to-br from-violet-500/[0.04] to-transparent p-4">
             <div className="flex items-start gap-3">
@@ -538,72 +629,155 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
             pending={refining}
           />
 
-          {/* A5 — Visual ad-group scaffold (single ad group for now) */}
-          <AdGroupScaffold channel={draft.channel} />
-
-          {/* Copy fields */}
-          {draft.channel === "PMAX" && (
-            <SingleField
-              label="Business name"
-              required
-              maxLen={25}
-              field={draft.businessName}
-              onChange={(text) =>
-                setDraft((d) =>
-                  d ? { ...d, businessName: { text, edited: true } } : d,
-                )
-              }
-            />
-          )}
-
-          <ListField
-            label={draft.channel === "PMAX" ? "Short headlines" : "Headlines"}
-            required
-            maxItems={15}
-            maxLen={30}
-            items={draft.headlines}
-            onChange={(items) =>
-              setDraft((d) => (d ? { ...d, headlines: items } : d))
-            }
-          />
-
-          {draft.channel === "PMAX" && (
-            <ListField
-              label="Long headlines"
-              required
-              maxItems={5}
-              maxLen={90}
-              multiline
-              items={draft.longHeadlines}
-              onChange={(items) =>
-                setDraft((d) => (d ? { ...d, longHeadlines: items } : d))
-              }
-            />
-          )}
-
-          <ListField
-            label="Descriptions"
-            required
-            maxItems={draft.channel === "PMAX" ? 5 : 4}
-            maxLen={90}
-            multiline
-            items={draft.descriptions}
-            onChange={(items) =>
-              setDraft((d) => (d ? { ...d, descriptions: items } : d))
-            }
-          />
-
+          {/* SEARCH path — Phase A5 multi-ad-group: render one card per
+              cluster. Each card edits its own headlines / descriptions /
+              keywords independently. Cards collapse to keep the page
+              scannable when there are 4-5 ad groups. */}
           {draft.channel === "SEARCH" && (
-            <ListField
-              label="Keyword suggestions"
-              required
-              maxItems={500}
-              maxLen={80}
-              items={draft.keywords}
-              onChange={(items) =>
-                setDraft((d) => (d ? { ...d, keywords: items } : d))
-              }
-            />
+            <>
+              {draft.clusters.map((cluster, idx) => (
+                <ClusterCard
+                  key={`${cluster.themeLabel}-${idx}`}
+                  index={idx}
+                  total={draft.clusters.length}
+                  cluster={cluster}
+                  onChange={(next) =>
+                    setDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            clusters: d.clusters.map((c, i) =>
+                              i === idx ? next : c,
+                            ),
+                          }
+                        : d,
+                    )
+                  }
+                  onRemove={
+                    draft.clusters.length > 1
+                      ? () =>
+                          setDraft((d) =>
+                            d
+                              ? {
+                                  ...d,
+                                  clusters: d.clusters.filter(
+                                    (_, i) => i !== idx,
+                                  ),
+                                }
+                              : d,
+                          )
+                      : undefined
+                  }
+                />
+              ))}
+              {/* Add-cluster button — gives the user manual control to
+                  add a 6th cluster (we cap at 5 in schema/launch). */}
+              {draft.clusters.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            clusters: [
+                              ...d.clusters,
+                              {
+                                themeLabel: `Ad group ${d.clusters.length + 1}`,
+                                intent: "",
+                                headlines: [],
+                                descriptions: [],
+                                keywords: [],
+                              },
+                            ],
+                          }
+                        : d,
+                    )
+                  }
+                  className="inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed border-border bg-background px-3 py-2 text-[12px] font-medium text-muted-foreground hover:bg-muted"
+                >
+                  <Plus className="size-3.5" />
+                  Add another ad group
+                </button>
+              )}
+            </>
+          )}
+
+          {/* PMAX path — Phase A5 multi-asset-group. Each card edits
+              one asset group's business name + headlines + long
+              headlines + descriptions. Images live below (shared across
+              every asset group). */}
+          {draft.channel === "PMAX" && (
+            <>
+              {draft.pmaxClusters.map((cluster, idx) => (
+                <PmaxClusterCard
+                  key={`${cluster.themeLabel}-${idx}`}
+                  index={idx}
+                  total={draft.pmaxClusters.length}
+                  cluster={cluster}
+                  onChange={(next) =>
+                    setDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            pmaxClusters: d.pmaxClusters.map((c, i) =>
+                              i === idx ? next : c,
+                            ),
+                          }
+                        : d,
+                    )
+                  }
+                  onRemove={
+                    draft.pmaxClusters.length > 1
+                      ? () =>
+                          setDraft((d) =>
+                            d
+                              ? {
+                                  ...d,
+                                  pmaxClusters: d.pmaxClusters.filter(
+                                    (_, i) => i !== idx,
+                                  ),
+                                }
+                              : d,
+                          )
+                      : undefined
+                  }
+                />
+              ))}
+              {/* Add-asset-group button — cap at 3 (PMAX best practice). */}
+              {draft.pmaxClusters.length < 3 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            pmaxClusters: [
+                              ...d.pmaxClusters,
+                              {
+                                themeLabel: `Asset group ${d.pmaxClusters.length + 1}`,
+                                intent: "",
+                                businessName: {
+                                  text: d.brandName.text.slice(0, 25),
+                                  edited: false,
+                                },
+                                headlines: [],
+                                longHeadlines: [],
+                                descriptions: [],
+                              },
+                            ],
+                          }
+                        : d,
+                    )
+                  }
+                  className="inline-flex w-fit items-center gap-1.5 rounded-md border border-dashed border-border bg-background px-3 py-2 text-[12px] font-medium text-muted-foreground hover:bg-muted"
+                >
+                  <Plus className="size-3.5" />
+                  Add another asset group
+                </button>
+              )}
+            </>
           )}
 
           {/* Images panel — optional but recommended for PMAX */}
@@ -631,25 +805,25 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
             onAccountIdChange={setAccountId}
             dailyBudgetUsd={dailyBudgetUsd}
             onBudgetChange={setDailyBudgetUsd}
+            landingPageUrl={landingPageUrl}
+            onLandingPageUrlChange={setLandingPageUrl}
             disabled={launching}
           />
 
-          {/* A6 — Conversion tracking (hard gate for conversion-based bidding) */}
-          <ConversionTrackingSection
-            mode={trackingMode}
-            onModeChange={setTrackingMode}
-            events={trackingEvents}
-            onToggleEvent={toggleEvent}
-            valueType={trackingValueType}
-            onValueTypeChange={setTrackingValueType}
-            valueAmount={trackingValueAmount}
-            onValueAmountChange={setTrackingValueAmount}
-            validated={trackingValidated}
-            onValidatedChange={setTrackingValidated}
+          {/* B3 — Conversion tracking: pick from the account's existing
+              actions (imported + ones the user created via the Hub). */}
+          <PrimaryGoalPicker
+            accountId={accountId}
+            actions={conversionActions}
+            loading={trackingLoading}
+            primaryActionId={primaryActionId}
+            onPrimaryActionIdChange={setPrimaryActionId}
+            readiness={trackingReadiness}
             disabled={launching}
           />
 
-          {/* A7 — Bidding strategy (gated on A6 validated) */}
+          {/* A7 + B3 — Bidding strategy. Conversion-based strategies are
+              locked unless tracking readiness is 'ready' or 'learning'. */}
           <BiddingStrategySection
             channel={channel}
             options={biddingOptions}
@@ -659,7 +833,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
             onTargetCpaChange={setTargetCpaUsd}
             targetRoas={targetRoas}
             onTargetRoasChange={setTargetRoas}
-            trackingValidated={trackingValidated}
+            readiness={trackingReadiness}
             disabled={launching}
           />
 
@@ -680,6 +854,37 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
           />
         </section>
       )}
+        </div>
+
+        {/* Right rail — live preview (the old /app/preview, inlined).
+            Sticky on desktop so it stays in view as the user scrolls
+            through buckets. On mobile it stacks below the form. */}
+        {draft && (
+          <aside className="lg:sticky lg:top-8 lg:self-start">
+            <PreviewRail
+              brandName={brandName || "Your brand"}
+              landingPageUrl={landingPageUrl}
+              channel={draft.channel}
+              firstHeadline={
+                draft.channel === "SEARCH"
+                  ? draft.clusters[0]?.headlines[0]?.text ?? ""
+                  : draft.pmaxClusters[0]?.headlines[0]?.text ?? ""
+              }
+              firstLongHeadline={
+                draft.channel === "PMAX"
+                  ? draft.pmaxClusters[0]?.longHeadlines[0]?.text ?? ""
+                  : ""
+              }
+              firstDescription={
+                draft.channel === "SEARCH"
+                  ? draft.clusters[0]?.descriptions[0]?.text ?? ""
+                  : draft.pmaxClusters[0]?.descriptions[0]?.text ?? ""
+              }
+              imageIds={imageIds}
+            />
+          </aside>
+        )}
+      </div>
     </div>
   );
 }
@@ -853,6 +1058,201 @@ function EditedDot() {
       className="ml-1 inline-block size-1.5 rounded-full bg-violet-500"
       title="You've edited this field — regenerate won't overwrite it"
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ClusterCard — A5 multi-ad-group editor.
+//
+// One card per theme cluster. Theme label is editable (just rename the
+// ad group). Intent is informational. Headlines / descriptions /
+// keywords are independently editable per cluster — keeping the same
+// edit-preservation pattern.
+// ---------------------------------------------------------------------------
+
+function ClusterCard({
+  index,
+  total,
+  cluster,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  total: number;
+  cluster: EditableCluster;
+  onChange: (next: EditableCluster) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Ad group {index + 1} of {total}
+            </span>
+          </div>
+          <Input
+            value={cluster.themeLabel}
+            onChange={(e) =>
+              onChange({ ...cluster, themeLabel: e.target.value })
+            }
+            placeholder="Theme label (e.g. Branded, Informational)"
+            maxLength={50}
+            className="mt-1 h-9 font-semibold text-[14px]"
+          />
+          {cluster.intent && (
+            <p className="mt-1.5 text-[11.5px] italic text-muted-foreground">
+              {cluster.intent}
+            </p>
+          )}
+        </div>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove ad group"
+            title="Remove this ad group"
+            className="mt-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+          >
+            <span aria-hidden>×</span>
+          </button>
+        )}
+      </header>
+
+      <div className="mt-4 space-y-4">
+        <ListField
+          label="Headlines"
+          required
+          maxItems={12}
+          maxLen={30}
+          items={cluster.headlines}
+          onChange={(headlines) => onChange({ ...cluster, headlines })}
+        />
+        <ListField
+          label="Descriptions"
+          required
+          maxItems={4}
+          maxLen={90}
+          multiline
+          items={cluster.descriptions}
+          onChange={(descriptions) => onChange({ ...cluster, descriptions })}
+        />
+        <ListField
+          label="Keywords"
+          required
+          maxItems={15}
+          maxLen={80}
+          items={cluster.keywords}
+          onChange={(keywords) => onChange({ ...cluster, keywords })}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PmaxClusterCard — A5 multi-asset-group editor (PMAX).
+//
+// Same shape as ClusterCard but for PMAX asset groups: business name +
+// short headlines + long headlines + descriptions. No keywords (PMAX
+// doesn't use them). Image assets live in the shared Images panel below
+// and are linked to every asset group.
+// ---------------------------------------------------------------------------
+
+function PmaxClusterCard({
+  index,
+  total,
+  cluster,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  total: number;
+  cluster: EditablePmaxCluster;
+  onChange: (next: EditablePmaxCluster) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Asset group {index + 1} of {total}
+            </span>
+          </div>
+          <Input
+            value={cluster.themeLabel}
+            onChange={(e) =>
+              onChange({ ...cluster, themeLabel: e.target.value })
+            }
+            placeholder="Theme label (e.g. Researcher, Ready to buy)"
+            maxLength={50}
+            className="mt-1 h-9 font-semibold text-[14px]"
+          />
+          {cluster.intent && (
+            <p className="mt-1.5 text-[11.5px] italic text-muted-foreground">
+              {cluster.intent}
+            </p>
+          )}
+        </div>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove asset group"
+            title="Remove this asset group"
+            className="mt-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+          >
+            <span aria-hidden>×</span>
+          </button>
+        )}
+      </header>
+
+      <div className="mt-4 space-y-4">
+        <SingleField
+          label="Business name"
+          required
+          maxLen={25}
+          field={cluster.businessName}
+          onChange={(text) =>
+            onChange({
+              ...cluster,
+              businessName: { text, edited: true },
+            })
+          }
+        />
+        <ListField
+          label="Short headlines"
+          required
+          maxItems={15}
+          maxLen={30}
+          items={cluster.headlines}
+          onChange={(headlines) => onChange({ ...cluster, headlines })}
+        />
+        <ListField
+          label="Long headlines"
+          required
+          maxItems={5}
+          maxLen={90}
+          multiline
+          items={cluster.longHeadlines}
+          onChange={(longHeadlines) =>
+            onChange({ ...cluster, longHeadlines })
+          }
+        />
+        <ListField
+          label="Descriptions"
+          required
+          maxItems={5}
+          maxLen={90}
+          multiline
+          items={cluster.descriptions}
+          onChange={(descriptions) => onChange({ ...cluster, descriptions })}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -1065,6 +1465,8 @@ function Bucket3({
   onAccountIdChange,
   dailyBudgetUsd,
   onBudgetChange,
+  landingPageUrl,
+  onLandingPageUrlChange,
   disabled,
 }: {
   accounts: LaunchableAccount[];
@@ -1072,6 +1474,8 @@ function Bucket3({
   onAccountIdChange: (id: string) => void;
   dailyBudgetUsd: number;
   onBudgetChange: (n: number) => void;
+  landingPageUrl: string;
+  onLandingPageUrlChange: (s: string) => void;
   disabled?: boolean;
 }) {
   return (
@@ -1148,6 +1552,26 @@ function Bucket3({
             </div>
             <p className="text-[11px] text-muted-foreground">
               Google bills your account directly. Min $1/day.
+            </p>
+          </div>
+
+          {/* Landing page URL — moved here from the widget bar because
+              it's a "you decide" field (Google requires a finalUrl on
+              every ad). Asking later keeps the entry point lean. */}
+          <div className="mt-4 grid gap-2">
+            <Label className="text-[12px] font-medium">
+              Landing page URL <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="url"
+              value={landingPageUrl}
+              onChange={(e) => onLandingPageUrlChange(e.target.value)}
+              placeholder="https://yourbrand.com/shop"
+              disabled={disabled}
+              className="h-10"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The page Google sends clicks to. Required.
             </p>
           </div>
         </>
@@ -1278,6 +1702,124 @@ function formatCustomerId(id: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// PreviewRail
+//
+// Live ad preview — sticky on the right of /app/create. Renders the
+// current draft (first headline / description / images) inside the same
+// Google placement mocks the old /app/preview page used (Search SERP,
+// Display banner, Discover card). Tabs let the user flip between
+// placements.
+// ---------------------------------------------------------------------------
+
+type PreviewTab = "search" | "display" | "discover";
+
+function PreviewRail({
+  brandName,
+  landingPageUrl,
+  channel,
+  firstHeadline,
+  firstLongHeadline,
+  firstDescription,
+  imageIds,
+}: {
+  brandName: string;
+  landingPageUrl: string;
+  channel: Channel;
+  firstHeadline: string;
+  firstLongHeadline: string;
+  firstDescription: string;
+  imageIds: GeneratedAssetIds | null;
+}) {
+  const [tab, setTab] = useState<PreviewTab>("search");
+
+  const landingDomain = useMemo(() => {
+    const tryUrl = landingPageUrl.trim();
+    if (tryUrl) {
+      try {
+        return new URL(tryUrl).hostname.replace(/^www\./, "");
+      } catch {
+        // fall through to slug
+      }
+    }
+    const slug = brandName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 24);
+    return `${slug || "yourbrand"}.com`;
+  }, [landingPageUrl, brandName]);
+
+  const adContent = {
+    brandName,
+    landingDomain,
+    headline: firstHeadline || brandName,
+    description: firstDescription,
+    longHeadline: firstLongHeadline || null,
+    heroUrl: imageIds?.marketingImageAssetId
+      ? `/api/assets/${imageIds.marketingImageAssetId}/bytes`
+      : undefined,
+    squareUrl: imageIds?.squareMarketingImageAssetId
+      ? `/api/assets/${imageIds.squareMarketingImageAssetId}/bytes`
+      : undefined,
+    logoUrl: imageIds?.logoAssetId
+      ? `/api/assets/${imageIds.logoAssetId}/bytes`
+      : undefined,
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Header — title + small "AI" badge so the user knows this
+          reflects the current draft + auto-updates as they edit. */}
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-[14px] font-semibold tracking-tight">
+          Live preview
+        </h2>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {channel} · updates as you edit
+        </span>
+      </div>
+
+      {/* Tabs */}
+      <div
+        role="tablist"
+        aria-label="Preview placement"
+        className="inline-flex rounded-md border border-border bg-background p-0.5"
+      >
+        {(
+          [
+            { id: "search", label: "Search" },
+            { id: "display", label: "Display" },
+            { id: "discover", label: "Discover" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "rounded px-3 py-1 text-[11.5px] font-medium transition-colors",
+              tab === t.id
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Render the picked mockup */}
+      <div>
+        {tab === "search" && <SearchSerpMockup content={adContent} />}
+        {tab === "display" && <DisplayBannerMockup content={adContent} />}
+        {tab === "discover" && <DiscoverCardMockup content={adContent} />}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // A10 — Refinement chat
 //
 // Multi-turn refinement. Each turn appends the user's note to the brief
@@ -1333,112 +1875,48 @@ function RefinementChat({
 }
 
 // ---------------------------------------------------------------------------
-// A5 — Visual ad-group scaffold
+// B3 — Primary goal picker
 //
-// For v1 every autopilot campaign launches with a single ad group. The
-// schema (AdGroup table) is already plural-ready, but the launcher
-// adapters still create one ad group per campaign. This card hints at
-// the planned shape without changing behavior.
-// ---------------------------------------------------------------------------
-
-function AdGroupScaffold({ channel }: { channel: Channel }) {
-  const label = channel === "PMAX" ? "asset group" : "ad group";
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <Layers className="size-3.5 text-muted-foreground" />
-        <span className="text-[12px] font-medium">
-          {label.charAt(0).toUpperCase() + label.slice(1)} 1 of 1
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          default theme
-        </span>
-      </div>
-      <button
-        type="button"
-        disabled
-        title={`Multi-${label} support arrives with the launcher v2 refactor (Phase A5).`}
-        className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground opacity-60"
-      >
-        <Plus className="size-3" />
-        Add {label}
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// A6 — Conversion tracking
+// Shows every ConversionAction on the chosen account (imported during
+// Phase 8a + created via the Hub). The user picks ONE — that FK lands
+// on the new Campaign row and tells the optimizer what to bid for.
 //
-// Four modes (hosted / existing / CRM / phone). For v1 the real tag /
-// GTM / CRM / phone-tracking integrations aren't wired yet — see Phase
-// 8c / 9 in AUTOPILOT_VISION_DRAFT.md. We collect the choices, the user
-// attests "tracking is set up", and that unlocks conversion-based
-// bidding strategies in A7.
+// Readiness modes (computed in CreateForm, displayed here):
+//   - 'ready'    → green badge, all bidding strategies unlocked
+//   - 'learning' → amber badge, conversion-based bidding allowed but
+//                  warned (no fire data yet)
+//   - 'blocked'  → red/grey, only Maximize Clicks is allowed
+//
+// "+ Add conversion" deep-links to /app/accounts/[id]/conversion-
+// tracking in a new tab. The customer creates the action there, comes
+// back, the picker re-fetches on next paint (currently they hit
+// "Refresh tracking" — auto-refresh on focus is a TODO).
 // ---------------------------------------------------------------------------
 
-const TRACKING_MODES: Array<{
-  id: TrackingMode;
-  label: string;
-  helper: string;
-  icon: React.ComponentType<{ className?: string }>;
-  comingSoon?: boolean;
-}> = [
-  {
-    id: "hosted",
-    label: "Hosted landing page",
-    helper: "Adsense hosts a page at <brand>.adsense.app with tracking pre-wired.",
-    icon: Globe,
-    comingSoon: true,
-  },
-  {
-    id: "existing-site",
-    label: "Your existing website",
-    helper: "Paste the gtag snippet OR connect Google Tag Manager.",
-    icon: ShieldCheck,
-  },
-  {
-    id: "crm",
-    label: "CRM (HubSpot / Pipedrive / Zoho)",
-    helper:
-      "Connect via OAuth — qualified leads flow back to Google for bid optimization.",
-    icon: Users,
-    comingSoon: true,
-  },
-  {
-    id: "phone",
-    label: "Phone / WhatsApp",
-    helper: "Google call-tracking number forwarded to yours.",
-    icon: Phone,
-    comingSoon: true,
-  },
-];
-
-function ConversionTrackingSection({
-  mode,
-  onModeChange,
-  events,
-  onToggleEvent,
-  valueType,
-  onValueTypeChange,
-  valueAmount,
-  onValueAmountChange,
-  validated,
-  onValidatedChange,
+function PrimaryGoalPicker({
+  accountId,
+  actions,
+  loading,
+  primaryActionId,
+  onPrimaryActionIdChange,
+  readiness,
   disabled,
 }: {
-  mode: TrackingMode | null;
-  onModeChange: (m: TrackingMode) => void;
-  events: Set<EventKey>;
-  onToggleEvent: (k: EventKey) => void;
-  valueType: ConversionTrackingInput["valueType"];
-  onValueTypeChange: (t: ConversionTrackingInput["valueType"]) => void;
-  valueAmount: number;
-  onValueAmountChange: (n: number) => void;
-  validated: boolean;
-  onValidatedChange: (b: boolean) => void;
+  accountId: string;
+  actions: ConversionActionOption[];
+  loading: boolean;
+  primaryActionId: string | null;
+  onPrimaryActionIdChange: (id: string | null) => void;
+  readiness: "ready" | "learning" | "blocked";
   disabled?: boolean;
 }) {
+  const router = useRouter();
+  const hasAccount = !!accountId;
+  const enabledActions = actions.filter((a) => a.status === "ENABLED");
+  const hubHref = accountId
+    ? `/app/accounts/${accountId}/conversion-tracking`
+    : undefined;
+
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -1448,155 +1926,186 @@ function ConversionTrackingSection({
             hard gate
           </span>
         </Label>
+        <ReadinessBadge readiness={readiness} />
       </div>
       <p className="mt-1 text-[11.5px] text-muted-foreground">
-        Set this up so the optimizer can tell which clicks turned into
-        leads. Required to unlock Max Conversions / Target CPA bidding.
+        Pick which conversion this campaign should optimize for. Without
+        one, only Maximize Clicks bidding is available — Google has no
+        signal to chase.
       </p>
 
-      {/* Mode pick */}
-      <div className="mt-4 grid gap-2">
-        <Label className="text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground">
-          Where do conversions happen?
-        </Label>
-        <div className="grid gap-2">
-          {TRACKING_MODES.map((m) => {
-            const Icon = m.icon;
-            const isActive = mode === m.id;
+      {!hasAccount && (
+        <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] text-amber-800">
+          Pick an account in Bucket 3 above first.
+        </div>
+      )}
+
+      {hasAccount && loading && (
+        <div className="mt-4 text-[12px] text-muted-foreground">
+          Loading conversion actions…
+        </div>
+      )}
+
+      {hasAccount && !loading && enabledActions.length === 0 && (
+        <div className="mt-4 rounded-md border border-dashed border-border bg-muted/30 p-4 text-center">
+          <Target className="mx-auto size-5 text-muted-foreground" />
+          <p className="mt-2 text-[12.5px] font-medium">
+            No conversion actions on this account
+          </p>
+          <p className="mt-1 text-[11.5px] text-muted-foreground">
+            Add one in the tracking hub — paste a gtag snippet on your
+            site or set up phone-call tracking. Takes a minute.
+          </p>
+          {hubHref && (
+            <a
+              href={hubHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md bg-foreground px-3 text-[12px] font-medium text-background hover:bg-foreground/85"
+            >
+              <Plus className="size-3" />
+              Set up tracking
+              <ExternalLink className="size-3" />
+            </a>
+          )}
+        </div>
+      )}
+
+      {hasAccount && !loading && enabledActions.length > 0 && (
+        <div className="mt-4 grid gap-2">
+          {enabledActions.map((a) => {
+            const picked = a.id === primaryActionId;
             return (
               <button
-                key={m.id}
+                key={a.id}
                 type="button"
-                onClick={() => onModeChange(m.id)}
-                disabled={disabled || m.comingSoon}
+                onClick={() => onPrimaryActionIdChange(a.id)}
+                disabled={disabled}
                 className={cn(
-                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed",
-                  isActive
+                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                  picked
                     ? "border-foreground bg-foreground/[0.04]"
                     : "border-border bg-background hover:bg-muted",
-                  m.comingSoon && "opacity-60",
                 )}
               >
-                <span
-                  className={cn(
-                    "mt-0.5 grid size-6 shrink-0 place-items-center rounded",
-                    isActive ? "bg-foreground text-background" : "bg-muted",
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-[12.5px] font-semibold">
-                    {m.label}
-                    {m.comingSoon && (
-                      <span className="rounded border border-border bg-muted px-1 py-0 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                        soon
+                <ActionHealthDot health={a.health} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold">
+                    {a.name}
+                    {a.isPrimary && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+                        <Star className="size-2.5 fill-current" />
+                        primary
                       </span>
                     )}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                    {m.helper}
-                  </span>
-                </span>
+                    {a.tagInstalled && (
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-700">
+                        tag installed
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {a.category} · {a.reason}
+                  </div>
+                </div>
+                {picked && (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-foreground" />
+                )}
               </button>
             );
           })}
-        </div>
-      </div>
-
-      {/* What counts */}
-      {mode && (
-        <>
-          <div className="mt-5 grid gap-2">
-            <Label className="text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground">
-              What counts as a conversion?
-            </Label>
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-              {(Object.keys(EVENT_LABELS) as EventKey[]).map((key) => (
-                <label
-                  key={key}
-                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[12px] hover:bg-muted"
-                >
-                  <input
-                    type="checkbox"
-                    checked={events.has(key)}
-                    onChange={() => onToggleEvent(key)}
-                    disabled={disabled}
-                    className="size-3.5 accent-foreground"
-                  />
-                  {EVENT_LABELS[key]}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Conversion value */}
-          <div className="mt-5 grid gap-2">
-            <Label className="text-[11.5px] font-medium uppercase tracking-wider text-muted-foreground">
-              Conversion value
-            </Label>
-            <div className="flex flex-wrap items-center gap-3">
-              {(
-                [
-                  { v: "fixed", label: "Same per conversion" },
-                  { v: "variable", label: "Variable (dynamic)" },
-                  { v: "count-only", label: "Count only" },
-                ] as const
-              ).map((opt) => (
-                <label
-                  key={opt.v}
-                  className="flex cursor-pointer items-center gap-2 text-[12px]"
-                >
-                  <input
-                    type="radio"
-                    checked={valueType === opt.v}
-                    onChange={() => onValueTypeChange(opt.v)}
-                    disabled={disabled}
-                    className="accent-foreground"
-                  />
-                  {opt.label}
-                </label>
-              ))}
-            </div>
-            {valueType === "fixed" && (
-              <div className="mt-1 flex items-center gap-2">
-                <span className="font-mono text-[13px] text-muted-foreground">
-                  $
-                </span>
-                <Input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={valueAmount}
-                  onChange={(e) =>
-                    onValueAmountChange(Number(e.target.value) || 0)
-                  }
-                  disabled={disabled}
-                  className="h-9 max-w-[120px]"
-                />
-              </div>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            {hubHref && (
+              <a
+                href={hubHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[11px] font-medium hover:bg-muted"
+              >
+                <Plus className="size-3" />
+                Add new conversion
+                <ExternalLink className="size-3" />
+              </a>
             )}
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="inline-flex h-7 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className="size-3" />
+              Refresh
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* Attestation gate */}
-          <label className="mt-5 flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-[12px]">
-            <input
-              type="checkbox"
-              checked={validated}
-              onChange={(e) => onValidatedChange(e.target.checked)}
-              disabled={disabled}
-              className="mt-0.5 size-3.5 accent-foreground"
-            />
-            <span>
-              <strong>I confirm tracking is set up</strong> on my landing
-              page or website. Unlocks Max Conversions and Target CPA
-              bidding. (Real validate-test-event button arrives in Phase
-              8c — for now this is your attestation.)
-            </span>
-          </label>
-        </>
+      {/* Readiness explainer */}
+      {hasAccount && readiness === "learning" && (
+        <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/[0.05] px-3 py-2 text-[11px] text-amber-800">
+          <Clock className="mr-1 inline size-3" />
+          Tag attested but no fires recorded yet. Google will start in
+          learning mode — expect noisy spend for ~2 weeks until enough
+          conversions accumulate.
+        </p>
+      )}
+      {hasAccount && readiness === "blocked" && primaryActionId && (
+        <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/[0.05] px-3 py-2 text-[11px] text-destructive">
+          <XCircle className="mr-1 inline size-3" />
+          This action is broken or has never fired and the tag isn&apos;t
+          marked installed. Repair or pick another to unlock smart bidding.
+        </p>
       )}
     </div>
+  );
+}
+
+function ReadinessBadge({
+  readiness,
+}: {
+  readiness: "ready" | "learning" | "blocked";
+}) {
+  if (readiness === "ready") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/[0.08] px-1.5 py-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+        <CheckCircle2 className="size-2.5" />
+        ready
+      </span>
+    );
+  }
+  if (readiness === "learning") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/[0.08] px-1.5 py-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+        <Clock className="size-2.5" />
+        learning
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-muted bg-muted px-1.5 py-0 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <HelpCircle className="size-2.5" />
+      not set
+    </span>
+  );
+}
+
+function ActionHealthDot({
+  health,
+}: {
+  health: ConversionActionOption["health"];
+}) {
+  const color =
+    health === "working"
+      ? "bg-emerald-500"
+      : health === "stale"
+        ? "bg-amber-500"
+        : health === "broken"
+          ? "bg-destructive"
+          : "bg-muted-foreground/50";
+  return (
+    <span
+      title={health}
+      className={cn("mt-1.5 size-2 shrink-0 rounded-full", color)}
+    />
   );
 }
 
@@ -1616,7 +2125,7 @@ function BiddingStrategySection({
   onTargetCpaChange,
   targetRoas,
   onTargetRoasChange,
-  trackingValidated,
+  readiness,
   disabled,
 }: {
   channel: Channel;
@@ -1627,10 +2136,16 @@ function BiddingStrategySection({
   onTargetCpaChange: (n: number) => void;
   targetRoas: number;
   onTargetRoasChange: (n: number) => void;
-  trackingValidated: boolean;
+  readiness: "ready" | "learning" | "blocked";
   disabled?: boolean;
 }) {
   const current = options.find((o) => o.id === value);
+  const helper =
+    readiness === "ready"
+      ? "Tracking is firing — all strategies available."
+      : readiness === "learning"
+        ? "Smart bidding allowed in learning mode (no fire data yet — expect ~2 weeks of noisy spend)."
+        : "Pick a working primary goal above to unlock conversion-based bidding.";
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -1641,17 +2156,13 @@ function BiddingStrategySection({
           </span>
         </Label>
       </div>
-      <p className="mt-1 text-[11.5px] text-muted-foreground">
-        {trackingValidated
-          ? "Tracking confirmed — all strategies available."
-          : "Conversion-based strategies are locked. Confirm tracking above to unlock."}
-      </p>
+      <p className="mt-1 text-[11.5px] text-muted-foreground">{helper}</p>
 
-      {channel === "PMAX" && !trackingValidated && (
+      {channel === "PMAX" && readiness === "blocked" && (
         <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11.5px] text-amber-800">
           <Target className="mr-1 inline size-3" />
-          PMAX requires conversion tracking. Set it up above before
-          launching.
+          PMAX requires conversion tracking. Set up a working primary
+          conversion above before launching.
         </div>
       )}
 
@@ -1726,41 +2237,55 @@ function BiddingStrategySection({
 
 // ---------------------------------------------------------------------------
 // Server-copy → draft helpers
+//
+// `ServerCopy` mirrors the discriminated `CopyResult` from actions.ts:
+//   • SEARCH → an array of theme clusters (Phase A5 multi-ad-group)
+//   • PMAX   → flat ad copy (single asset group for v1)
 // ---------------------------------------------------------------------------
 
 type ServerCopy =
-  | { channel: "SEARCH"; copy: GeneratedSearchCopy }
-  | { channel: "PMAX"; copy: GeneratedPmaxCopy };
+  | { channel: "SEARCH"; clusters: ThemeCluster[] }
+  | { channel: "PMAX"; clusters: PmaxAssetGroupCluster[] };
 
 function buildDraftFromCopy(c: ServerCopy, brandName: string): DraftCopy {
   if (c.channel === "PMAX") {
     return {
       channel: "PMAX",
       brandName: { text: brandName, edited: false },
-      businessName: {
-        text: c.copy.businessName || brandName.slice(0, 25),
-        edited: false,
-      },
-      headlines: c.copy.headlines.map((text) => ({ text, edited: false })),
-      longHeadlines: c.copy.longHeadlines.map((text) => ({
-        text,
-        edited: false,
+      clusters: [],
+      pmaxClusters: c.clusters.map((cluster) => ({
+        themeLabel: cluster.themeLabel,
+        intent: cluster.intent,
+        businessName: {
+          text: cluster.businessName || brandName.slice(0, 25),
+          edited: false,
+        },
+        headlines: cluster.headlines.map((text) => ({ text, edited: false })),
+        longHeadlines: cluster.longHeadlines.map((text) => ({
+          text,
+          edited: false,
+        })),
+        descriptions: cluster.descriptions.map((text) => ({
+          text,
+          edited: false,
+        })),
       })),
-      descriptions: c.copy.descriptions.map((text) => ({
-        text,
-        edited: false,
-      })),
-      keywords: [],
     };
   }
   return {
     channel: "SEARCH",
     brandName: { text: brandName, edited: false },
-    businessName: { text: "", edited: false },
-    headlines: c.copy.headlines.map((text) => ({ text, edited: false })),
-    longHeadlines: [],
-    descriptions: c.copy.descriptions.map((text) => ({ text, edited: false })),
-    keywords: c.copy.keywords.map((text) => ({ text, edited: false })),
+    pmaxClusters: [],
+    clusters: c.clusters.map((cluster) => ({
+      themeLabel: cluster.themeLabel,
+      intent: cluster.intent,
+      headlines: cluster.headlines.map((text) => ({ text, edited: false })),
+      descriptions: cluster.descriptions.map((text) => ({
+        text,
+        edited: false,
+      })),
+      keywords: cluster.keywords.map((text) => ({ text, edited: false })),
+    })),
   };
 }
 
@@ -1772,27 +2297,73 @@ function mergePreservingEdits(
     return buildDraftFromCopy(fresh, prev.brandName.text);
   }
   if (fresh.channel === "PMAX" && prev.channel === "PMAX") {
-    return {
-      ...prev,
-      businessName: prev.businessName.edited
-        ? prev.businessName
-        : {
-            text:
-              fresh.copy.businessName || prev.brandName.text.slice(0, 25),
+    // Same cluster-match-by-themeLabel pattern as SEARCH below — keeps
+    // manual edits inside each asset-group card across re-rolls.
+    const merged: EditablePmaxCluster[] = fresh.clusters.map((freshC) => {
+      const prevC = prev.pmaxClusters.find(
+        (p) => p.themeLabel.toLowerCase() === freshC.themeLabel.toLowerCase(),
+      );
+      if (!prevC) {
+        return {
+          themeLabel: freshC.themeLabel,
+          intent: freshC.intent,
+          businessName: {
+            text: freshC.businessName || prev.brandName.text.slice(0, 25),
             edited: false,
           },
-      headlines: mergeList(prev.headlines, fresh.copy.headlines),
-      longHeadlines: mergeList(prev.longHeadlines, fresh.copy.longHeadlines),
-      descriptions: mergeList(prev.descriptions, fresh.copy.descriptions),
-    };
+          headlines: freshC.headlines.map((t) => ({ text: t, edited: false })),
+          longHeadlines: freshC.longHeadlines.map((t) => ({
+            text: t,
+            edited: false,
+          })),
+          descriptions: freshC.descriptions.map((t) => ({
+            text: t,
+            edited: false,
+          })),
+        };
+      }
+      return {
+        themeLabel: prevC.themeLabel,
+        intent: prevC.intent || freshC.intent,
+        businessName: prevC.businessName.edited
+          ? prevC.businessName
+          : {
+              text: freshC.businessName || prev.brandName.text.slice(0, 25),
+              edited: false,
+            },
+        headlines: mergeList(prevC.headlines, freshC.headlines),
+        longHeadlines: mergeList(prevC.longHeadlines, freshC.longHeadlines),
+        descriptions: mergeList(prevC.descriptions, freshC.descriptions),
+      };
+    });
+    return { ...prev, pmaxClusters: merged };
   }
   if (fresh.channel === "SEARCH" && prev.channel === "SEARCH") {
-    return {
-      ...prev,
-      headlines: mergeList(prev.headlines, fresh.copy.headlines),
-      descriptions: mergeList(prev.descriptions, fresh.copy.descriptions),
-      keywords: mergeList(prev.keywords, fresh.copy.keywords),
-    };
+    const merged: EditableCluster[] = fresh.clusters.map((freshC) => {
+      const prevC = prev.clusters.find(
+        (p) => p.themeLabel.toLowerCase() === freshC.themeLabel.toLowerCase(),
+      );
+      if (!prevC) {
+        return {
+          themeLabel: freshC.themeLabel,
+          intent: freshC.intent,
+          headlines: freshC.headlines.map((t) => ({ text: t, edited: false })),
+          descriptions: freshC.descriptions.map((t) => ({
+            text: t,
+            edited: false,
+          })),
+          keywords: freshC.keywords.map((t) => ({ text: t, edited: false })),
+        };
+      }
+      return {
+        themeLabel: prevC.themeLabel,
+        intent: prevC.intent || freshC.intent,
+        headlines: mergeList(prevC.headlines, freshC.headlines),
+        descriptions: mergeList(prevC.descriptions, freshC.descriptions),
+        keywords: mergeList(prevC.keywords, freshC.keywords),
+      };
+    });
+    return { ...prev, clusters: merged };
   }
   return prev;
 }

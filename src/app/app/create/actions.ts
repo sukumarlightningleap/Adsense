@@ -27,15 +27,21 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { planCampaign, type CampaignPlan } from "@/lib/ai/architect";
+import {
+  generateClusteredPmaxCopy,
+  generateClusteredSearchCopy,
+} from "@/lib/ai/copy-generator";
 import { GeminiKeyError } from "@/lib/ai/gemini-client";
 import {
   generateAssetsForBrief,
-  generateCopyForBrief,
   type GeneratedAssetIds,
-  type GeneratedCopy,
   type PipelineMode,
 } from "@/lib/ai/pipeline";
-import type { AdBrief } from "@/lib/ai/types";
+import type {
+  AdBrief,
+  PmaxAssetGroupCluster,
+  ThemeCluster,
+} from "@/lib/ai/types";
 import { buildLaunchPayload } from "@/lib/wizard/payload-builder";
 import {
   FullDraftSchema,
@@ -59,11 +65,21 @@ export type PlanSummary = {
   masterPrompt: string;
 };
 
+/**
+ * Channel-discriminated copy result.
+ *
+ *   SEARCH → returns 1-5 theme clusters (Phase A5 multi-ad-group)
+ *   PMAX   → returns flat copy (single asset group for v1)
+ */
+export type CopyResult =
+  | { channel: "SEARCH"; clusters: ThemeCluster[] }
+  | { channel: "PMAX"; clusters: PmaxAssetGroupCluster[] };
+
 export type PlanAndGenerateResult =
   | {
       ok: true;
       plan: PlanSummary;
-      copy: GeneratedCopy;
+      result: CopyResult;
       brief: AdBrief;
     }
   | { ok: false; error: string };
@@ -87,20 +103,40 @@ export async function planAndGenerateCopy(
     };
   }
 
+  const channel = input.channel ?? "SEARCH";
   const brief: AdBrief = {
-    channel: input.channel ?? "SEARCH",
+    channel,
     brandName,
     productDescription,
     landingPageUrl: input.landingPageUrl?.trim() ?? "",
   };
 
   try {
-    // Run architect + copy in parallel. The architect doesn't depend on
-    // the copy and vice versa.
-    const [plan, copy] = await Promise.all([
+    // Run architect + copy in parallel. Both channels now use clustered
+    // generators (Phase A5):
+    //   SEARCH → 1-5 ad-group clusters
+    //   PMAX   → 1-3 asset-group clusters
+    const [plan, clusters] = await Promise.all([
       planCampaign(brief),
-      generateCopyForBrief(brief),
+      channel === "SEARCH"
+        ? generateClusteredSearchCopy(brief)
+        : generateClusteredPmaxCopy(brief),
     ]);
+
+    const result: CopyResult =
+      channel === "SEARCH"
+        ? {
+            channel: "SEARCH",
+            clusters: (clusters as Awaited<
+              ReturnType<typeof generateClusteredSearchCopy>
+            >).clusters,
+          }
+        : {
+            channel: "PMAX",
+            clusters: (clusters as Awaited<
+              ReturnType<typeof generateClusteredPmaxCopy>
+            >).clusters,
+          };
 
     await db.auditLog.create({
       data: {
@@ -110,20 +146,15 @@ export async function planAndGenerateCopy(
         targetId: null,
         payload: {
           brandName,
-          channel: brief.channel,
+          channel,
           sector: plan.sector,
           packId: plan.pack.id,
-          headlineCount: copy.copy.headlines.length,
+          groupCount: result.clusters.length,
         },
       },
     });
 
-    return {
-      ok: true,
-      plan: summarizePlan(plan),
-      copy,
-      brief,
-    };
+    return { ok: true, plan: summarizePlan(plan), result, brief };
   } catch (e) {
     if (e instanceof GeminiKeyError) {
       return { ok: false, error: e.message };
@@ -137,7 +168,7 @@ export async function planAndGenerateCopy(
 }
 
 export type RegenerateCopyResult =
-  | { ok: true; copy: GeneratedCopy }
+  | { ok: true; result: CopyResult }
   | { ok: false; error: string };
 
 /**
@@ -160,14 +191,26 @@ export async function regenerateCopy(
     return { ok: false, error: "Brief is incomplete." };
   }
 
+  const channel = input.channel ?? "SEARCH";
+  const brief: AdBrief = {
+    channel,
+    brandName,
+    productDescription,
+    landingPageUrl: input.landingPageUrl?.trim() ?? "",
+  };
+
   try {
-    const copy = await generateCopyForBrief({
-      channel: input.channel ?? "SEARCH",
-      brandName,
-      productDescription,
-      landingPageUrl: input.landingPageUrl?.trim() ?? "",
-    });
-    return { ok: true, copy };
+    const result: CopyResult =
+      channel === "SEARCH"
+        ? {
+            channel: "SEARCH",
+            clusters: (await generateClusteredSearchCopy(brief)).clusters,
+          }
+        : {
+            channel: "PMAX",
+            clusters: (await generateClusteredPmaxCopy(brief)).clusters,
+          };
+    return { ok: true, result };
   } catch (e) {
     if (e instanceof GeminiKeyError) {
       return { ok: false, error: e.message };
@@ -297,6 +340,71 @@ export async function listLaunchableAccounts(): Promise<LaunchableAccount[]> {
 }
 
 // ===========================================================================
+// Conversion action picker — Phase B3.
+//
+// The Create-form reads the chosen account's ConversionAction rows so
+// the customer can pick which one this campaign should optimize for.
+// We include enough state (health + tagInstalled) for the form to
+// compute whether each option is "ready" or "learning" without a
+// second round-trip.
+// ===========================================================================
+
+export type ConversionActionOption = {
+  id: string;
+  name: string;
+  category: string;
+  status: string;
+  isPrimary: boolean;
+  /** 'working' | 'stale' | 'broken' | 'inactive' (per health.ts). */
+  health: "working" | "stale" | "broken" | "inactive";
+  reason: string;
+  tagInstalled: boolean;
+  providerConversionId: string | null;
+};
+
+export async function listConversionActionsForAccount(
+  accountId: string,
+): Promise<ConversionActionOption[]> {
+  const session = await auth();
+  if (!session?.user) return [];
+
+  // Cheap ownership check first.
+  const account = await db.adsAccount.findFirst({
+    where: { id: accountId, userId: session.user.id, demoMode: false },
+    select: { id: true },
+  });
+  if (!account) return [];
+
+  // Lazy import to avoid pulling lib into the create-page bundle when
+  // the user hasn't picked an account yet.
+  const { getConversionHealthForAccount } = await import(
+    "@/lib/google-ads/health"
+  );
+  const healthRows = await getConversionHealthForAccount({ accountId });
+
+  // We need tagInstalled too — pull it in one quick query.
+  const tagRows = await db.conversionAction.findMany({
+    where: { accountId },
+    select: { id: true, tagInstalled: true },
+  });
+  const tagById = new Map(tagRows.map((r) => [r.id, r.tagInstalled]));
+
+  return healthRows
+    .filter((h) => h.status !== "REMOVED")
+    .map((h) => ({
+      id: h.id,
+      name: h.name,
+      category: h.category,
+      status: h.status,
+      isPrimary: h.isPrimary,
+      health: h.health,
+      reason: h.reason,
+      tagInstalled: tagById.get(h.id) ?? false,
+      providerConversionId: h.providerConversionId,
+    }));
+}
+
+// ===========================================================================
 // Launch — translate the autopilot draft into the wizard's CampaignDraft
 // shape, validate, and create the Campaign row as PAUSED. Returns the
 // new campaign id so the client can navigate to its detail page (where
@@ -344,23 +452,24 @@ export type LaunchInput = {
   audience: {
     country: CountryCode;
   };
-  // SEARCH copy
-  search?: {
-    headlines: string[];
-    descriptions: string[];
-    keywords: string[];
-  };
-  // PMAX copy
-  pmax?: {
-    headlines: string[];
-    longHeadlines: string[];
-    descriptions: string[];
-    businessName: string;
-  };
+  // SEARCH copy — Phase A5 multi-ad-group: each cluster becomes an
+  // AdGroup on Google. Required when channel='SEARCH'.
+  searchClusters?: ThemeCluster[];
+  // PMAX copy — Phase A5 multi-asset-group: each cluster becomes an
+  // AssetGroup on Google. Required when channel='PMAX'. Image assets
+  // (logo + marketing) are shared across all asset groups.
+  pmaxClusters?: PmaxAssetGroupCluster[];
   // Image asset IDs (optional — only matter for PMAX launch)
   assetIds?: GeneratedAssetIds;
-  // A6: customer's conversion-tracking setup choices
+  // A6: customer's conversion-tracking setup choices (LEGACY — kept for
+  // backward compat. Phase B3 replaces this with the real
+  // primaryConversionActionId picker below; the form sends both for
+  // now so the audit log keeps useful context.)
   conversionTracking?: ConversionTrackingInput;
+  // B3: the conversion action this campaign optimizes for. NULL is
+  // allowed only when bidding strategy is MAXIMIZE_CLICKS (the form
+  // enforces this client-side; the server falls back to safe defaults).
+  primaryConversionActionId?: string;
   // A7: bidding strategy override (validated only if A6 declared
   // validated; UI enforces this).
   bidding?: BiddingStrategyInput;
@@ -424,6 +533,22 @@ export async function launchCampaignFromCreate(
     ? validated.pmaxBudget!.biddingStrategy
     : validated.searchBudget!.biddingStrategy;
 
+  // B3: validate the picked primary conversion action — must belong to
+  // this account and be ENABLED. Silently drops invalid IDs (the form's
+  // gate normally prevents that, but never trust the client).
+  let primaryConversionActionId: string | null = null;
+  if (input.primaryConversionActionId) {
+    const action = await db.conversionAction.findFirst({
+      where: {
+        id: input.primaryConversionActionId,
+        accountId: account.id,
+        status: "ENABLED",
+      },
+      select: { id: true },
+    });
+    primaryConversionActionId = action?.id ?? null;
+  }
+
   const campaign = await db.campaign.create({
     data: {
       accountId: account.id,
@@ -435,6 +560,7 @@ export async function launchCampaignFromCreate(
       yamlText,
       payloadJson: payload,
       source: "created",
+      primaryConversionActionId,
       demoMode: false,
     },
   });
@@ -450,11 +576,10 @@ export async function launchCampaignFromCreate(
         customerId: account.customerId,
         biddingStrategy,
         dailyUsd,
-        // A6: customer's stated conversion-tracking setup. None of
-        // this is enforced server-side yet — it's a record of what
-        // they said so Phase 8c (real tag / GTM / CRM provisioning)
-        // can pick it up.
+        // A6: legacy self-attestation snapshot (kept for audit context).
         conversionTracking: input.conversionTracking ?? null,
+        // B3: actual ConversionAction FK persisted on the Campaign row.
+        primaryConversionActionId,
       },
     },
   });
@@ -510,20 +635,40 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
       scope: "nationwide",
       cities: [],
     },
-    searchAdCopy: !isPmax && input.search
+    // Legacy field — kept populated as a fallback. The adapter prefers
+    // `searchAdGroups` when present, so this is just for backward
+    // compat. We use the first cluster's copy as the placeholder.
+    searchAdCopy: !isPmax && input.searchClusters?.[0]
       ? {
-          headlines: input.search.headlines,
-          descriptions: input.search.descriptions,
-          keywords: input.search.keywords,
+          headlines: input.searchClusters[0].headlines,
+          descriptions: input.searchClusters[0].descriptions,
+          keywords: input.searchClusters[0].keywords,
           negativeKeywords: [],
         }
       : { headlines: [], descriptions: [], keywords: [], negativeKeywords: [] },
-    pmaxAdCopy: isPmax && input.pmax
+    // Phase A5 — multi-ad-group SEARCH. When present, the adapter
+    // creates one AdGroup per cluster.
+    searchAdGroups:
+      !isPmax && input.searchClusters && input.searchClusters.length > 0
+        ? input.searchClusters.map((c) => ({
+            themeLabel: c.themeLabel,
+            intent: c.intent,
+            headlines: c.headlines,
+            descriptions: c.descriptions,
+            keywords: c.keywords,
+            negativeKeywords: [],
+          }))
+        : undefined,
+    // Legacy single-asset-group `pmaxAdCopy` — kept populated as a
+    // fallback. The PMAX adapter prefers `pmaxAssetGroups` when present;
+    // we use the first cluster's copy as the placeholder here so the
+    // schema always validates.
+    pmaxAdCopy: isPmax && input.pmaxClusters?.[0]
       ? {
-          headlines: input.pmax.headlines,
-          longHeadlines: input.pmax.longHeadlines,
-          descriptions: input.pmax.descriptions,
-          businessName: input.pmax.businessName,
+          headlines: input.pmaxClusters[0].headlines,
+          longHeadlines: input.pmaxClusters[0].longHeadlines,
+          descriptions: input.pmaxClusters[0].descriptions,
+          businessName: input.pmaxClusters[0].businessName,
         }
       : {
           headlines: [],
@@ -531,6 +676,19 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
           descriptions: [],
           businessName: "",
         },
+    // Phase A5 — multi-asset-group PMAX. When present, the adapter
+    // creates one AssetGroup per cluster.
+    pmaxAssetGroups:
+      isPmax && input.pmaxClusters && input.pmaxClusters.length > 0
+        ? input.pmaxClusters.map((c) => ({
+            themeLabel: c.themeLabel,
+            intent: c.intent,
+            headlines: c.headlines,
+            longHeadlines: c.longHeadlines,
+            descriptions: c.descriptions,
+            businessName: c.businessName,
+          }))
+        : undefined,
     searchBudget: {
       dailyUsd: input.dailyBudgetUsd,
       biddingStrategy: searchBidding,
