@@ -11,6 +11,7 @@
  */
 import { NextResponse } from "next/server";
 
+import { optimizeAllConnectedAccounts } from "@/lib/google-ads/auto-optimize";
 import { syncAllConnectedAccounts } from "@/lib/google-ads/sync";
 
 // Long-running on accounts with many campaigns. Bump the function
@@ -31,22 +32,43 @@ export async function GET(req: Request) {
   }
 
   const t0 = Date.now();
-  const results = await syncAllConnectedAccounts();
-  const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
+  // 1. Sync metrics — campaign + ad-group KPIs and conversion-action stats.
+  const syncResults = await syncAllConnectedAccounts();
+  // 2. Phase 10 — optimizer runs immediately after sync so it operates on
+  //    the freshest 7d window. Accounts with optimizationMode='off' are
+  //    skipped at the query layer; 'review_first' emits suggestions
+  //    instead of mutating.
+  const optimizeResults = await optimizeAllConnectedAccounts();
+
+  const syncErrors = syncResults.reduce((s, r) => s + r.errors.length, 0);
+  const optimizeErrors = optimizeResults.reduce(
+    (s, r) => s + r.errors.length,
+    0,
+  );
 
   return NextResponse.json({
-    ok: totalErrors === 0,
-    accounts: results.length,
-    totals: {
-      campaignKpiRows: results.reduce((s, r) => s + r.campaignKpiRows, 0),
-      adGroupKpiRows: results.reduce((s, r) => s + r.adGroupKpiRows, 0),
-      conversionActionsUpdated: results.reduce(
+    ok: syncErrors + optimizeErrors === 0,
+    accounts: syncResults.length,
+    sync: {
+      campaignKpiRows: syncResults.reduce((s, r) => s + r.campaignKpiRows, 0),
+      adGroupKpiRows: syncResults.reduce((s, r) => s + r.adGroupKpiRows, 0),
+      conversionActionsUpdated: syncResults.reduce(
         (s, r) => s + r.conversionActionsUpdated,
         0,
       ),
-      errors: totalErrors,
+      errors: syncErrors,
     },
-    perAccount: results,
+    optimize: {
+      accounts: optimizeResults.length,
+      actionsTaken: optimizeResults.reduce((s, r) => s + r.actionsTaken, 0),
+      suggestionsEmitted: optimizeResults.reduce(
+        (s, r) => s + r.suggestionsEmitted,
+        0,
+      ),
+      errors: optimizeErrors,
+    },
+    perAccountSync: syncResults,
+    perAccountOptimize: optimizeResults,
     durationMs: Date.now() - t0,
   });
 }

@@ -8,11 +8,20 @@
  * the customer immediately sees what we mirrored.
  */
 import { useState, useTransition } from "react";
-import { CheckCircle2, Download, Link2, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Link2,
+  RefreshCw,
+  Unlink,
+} from "lucide-react";
 
 import type { ImportResult } from "@/lib/google-ads/importer";
 import { cn } from "@/lib/utils";
 
+import { disconnectAccountAction } from "./disconnect-action";
 import { runImportAction, type RunImportResult } from "./import-action";
 
 type Props = {
@@ -28,14 +37,31 @@ export function ConnectionCard({
   connectedAt,
   lastImportedAt,
 }: Props) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<RunImportResult | null>(null);
+  const [disconnectPending, startDisconnect] = useTransition();
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   function onImport() {
     setResult(null);
     startTransition(async () => {
       const r = await runImportAction(accountId);
       setResult(r);
+    });
+  }
+
+  function onDisconnect() {
+    setDisconnectError(null);
+    startDisconnect(async () => {
+      const r = await disconnectAccountAction(accountId);
+      if (!r.ok) {
+        setDisconnectError(r.error);
+        return;
+      }
+      setConfirmDisconnect(false);
+      router.refresh();
     });
   }
 
@@ -102,6 +128,60 @@ export function ConnectionCard({
             <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
               {result.error}
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Disconnect — destructive, gated behind a confirm.
+          Only shown when there's an OAuth token to actually disconnect. */}
+      {connected && (
+        <div className="mt-4 border-t border-border pt-4">
+          {!confirmDisconnect ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11.5px] text-muted-foreground">
+                Stop syncing this account. Imported campaigns + KPIs stay
+                for history. You can reconnect any time.
+              </p>
+              <button
+                type="button"
+                onClick={() => setConfirmDisconnect(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-destructive/30 bg-background px-3 text-[11.5px] font-medium text-destructive hover:bg-destructive/5"
+              >
+                <Unlink className="size-3" />
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <AlertTriangle className="size-4 shrink-0 text-destructive" />
+              <span className="text-[12px] text-destructive">
+                Disconnect from Google? The cron will stop syncing
+                metrics for this account.
+              </span>
+              <div className="ml-auto flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={onDisconnect}
+                  disabled={disconnectPending}
+                  className="rounded bg-destructive px-2.5 py-1 text-[11.5px] font-medium text-white hover:bg-destructive/85 disabled:opacity-50"
+                >
+                  {disconnectPending ? "Disconnecting…" : "Yes, disconnect"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDisconnect(false)}
+                  disabled={disconnectPending}
+                  className="rounded border border-border bg-background px-2.5 py-1 text-[11.5px] font-medium hover:bg-muted disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+              {disconnectError && (
+                <p className="basis-full text-[11px] text-destructive">
+                  {disconnectError}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

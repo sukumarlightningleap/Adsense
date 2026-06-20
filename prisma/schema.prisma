@@ -116,9 +116,10 @@ model User {
   lastLoginAt    DateTime? @map("last_login_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  accounts     AdsAccount[]
-  uploadedAssets Asset[]    @relation("AssetUploader")
-  auditEntries AuditLog[]
+  accounts       AdsAccount[]
+  uploadedAssets Asset[]        @relation("AssetUploader")
+  auditEntries   AuditLog[]
+  notifications  Notification[]
 
   @@index([role])
   @@map("users")
@@ -159,6 +160,13 @@ model AdsAccount {
   /// Google rejects metric queries against them
   /// ("Metrics cannot be requested for a manager account").
   isManager          Boolean   @default(false) @map("is_manager")
+  /// Phase 10 — how the daily cron acts on bleed signals:
+  ///   'off'           → never touch anything (read-only sync)
+  ///   'review_first'  → emit a notification suggesting the action; user
+  ///                     reviews + applies manually (DEFAULT — safest)
+  ///   'auto'          → pause bleeding ad groups immediately, then
+  ///                     emit a notification announcing what was done
+  optimizationMode   String    @default("review_first") @map("optimization_mode")
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaigns          Campaign[]
@@ -471,6 +479,47 @@ model Ga4LinkStatus {
   account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("ga4_link_status")
+}
+
+// ---------------------------------------------------------------------------
+// Notification — Phase 11 inbox + email queue.
+//
+// Anything the autopilot does on the customer's behalf (auto-pause a
+// bleeder, fix a broken tracker, etc.) creates a Notification row.
+// The deliverer cron picks up `status='pending'` rows and sends them
+// via Resend (email) — falling back to "in-app only" if no API key is
+// configured. Future: SMS via Twilio, WhatsApp via Twilio Business,
+// weekly AI-written PDF report.
+// ---------------------------------------------------------------------------
+model Notification {
+  id            String    @id @default(cuid())
+  userId        String    @map("user_id")
+  /// Optional — when the notification is about a specific account.
+  accountId     String?   @map("account_id")
+  /// 'auto_pause' | 'pause_suggestion' | 'tracking_break' |
+  /// 'import_error' | 'launch_success' | 'weekly_report' | etc.
+  kind          String
+  /// 'info' | 'warning' | 'error'
+  severity      String    @default("info")
+  title         String
+  body          String
+  /// Free-form structured payload (e.g. {adGroupId, cpa, threshold}).
+  payload       Json?
+  /// Delivery state: 'pending' (in queue), 'sent' (delivered), 'failed',
+  /// 'skipped' (no channel configured — in-app inbox only).
+  status        String    @default("pending")
+  /// Set when the user opens the inbox + clicks the row.
+  readAt        DateTime? @map("read_at")
+  /// When the deliverer last tried — set on success OR failure.
+  deliveredAt   DateTime? @map("delivered_at")
+  deliveryError String?   @map("delivery_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("notifications")
 }
 
 // ---------------------------------------------------------------------------

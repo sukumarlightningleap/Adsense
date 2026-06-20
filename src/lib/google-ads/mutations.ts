@@ -29,6 +29,79 @@ export type SetStatusResult =
   | { ok: false; error: string };
 
 /**
+ * Mutate an ad-group's status in Google Ads + mirror in our DB.
+ * Used by the optimizer (Phase 10) to auto-pause bleeders, and by
+ * future per-ad-group UI controls.
+ */
+export async function setAdGroupStatus(opts: {
+  adGroupId: string;         // our DB id
+  newStatus: "ENABLED" | "PAUSED" | "REMOVED";
+  /**
+   * Optional — set to a userId to gate this on ownership. The cron
+   * skips this check (it acts as the system on behalf of the account
+   * owner already resolved upstream).
+   */
+  userId?: string;
+  /** Audit-log action tag (default: 'ad_group.status_change'). */
+  auditAction?: string;
+  /** Audit-log payload extras (e.g. reason for auto-pause). */
+  auditExtras?: Record<string, unknown>;
+}): Promise<SetStatusResult> {
+  const adGroup = await db.adGroup.findFirst({
+    where: { id: opts.adGroupId },
+    include: { campaign: { include: { account: true } } },
+  });
+  if (!adGroup) return { ok: false, error: "Ad group not found." };
+  if (opts.userId && adGroup.campaign.account.userId !== opts.userId) {
+    return { ok: false, error: "Not your ad group." };
+  }
+  if (!adGroup.providerAdGroupId) {
+    return {
+      ok: false,
+      error: "Ad group has no provider ID — never launched to Google.",
+    };
+  }
+
+  const customer = buildCustomerForAccount(adGroup.campaign.account);
+  const customerIdNum = adGroup.campaign.account.customerId.replace(/-/g, "");
+  const resourceName = `customers/${customerIdNum}/adGroups/${adGroup.providerAdGroupId}`;
+
+  try {
+    await customer.adGroups.update([
+      { resource_name: resourceName, status: opts.newStatus },
+    ]);
+  } catch (e) {
+    return { ok: false, error: extractGoogleError(e) };
+  }
+
+  await db.adGroup.update({
+    where: { id: adGroup.id },
+    data: { status: opts.newStatus },
+  });
+
+  await db.auditLog.create({
+    data: {
+      userId: opts.userId ?? null,
+      action: opts.auditAction ?? "ad_group.status_change",
+      targetKind: "ad_group",
+      targetId: adGroup.id,
+      payload: {
+        previousStatus: adGroup.status,
+        newStatus: opts.newStatus,
+        providerAdGroupId: adGroup.providerAdGroupId,
+        ...(opts.auditExtras ?? {}),
+      },
+    },
+  });
+
+  return {
+    ok: true,
+    previousStatus: adGroup.status,
+    newStatus: opts.newStatus,
+  };
+}
+
+/**
  * Mutate a campaign's status in Google Ads + mirror in our DB.
  */
 export async function setCampaignStatus(opts: {

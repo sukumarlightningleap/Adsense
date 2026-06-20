@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Bell,
   Building2,
   Database,
   ImageIcon,
@@ -15,6 +16,7 @@ import {
   Settings,
   Sparkles,
   Users,
+  Wand2,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -41,10 +43,12 @@ const SECTIONS: Section[] = [
     label: "Workspace",
     items: [
       { href: "/app", label: "Overview", icon: LayoutDashboard },
+      { href: "/app/create", label: "Create", icon: Wand2 },
       { href: "/app/preview", label: "Preview", icon: Sparkles },
       { href: "/app/campaigns", label: "Campaigns", icon: Megaphone },
       { href: "/app/accounts", label: "Accounts", icon: Building2 },
       { href: "/app/assets", label: "Assets", icon: ImageIcon },
+      { href: "/app/inbox", label: "Inbox", icon: Bell },
       { href: "/app/settings", label: "Settings", icon: Settings },
     ],
   },
