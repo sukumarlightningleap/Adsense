@@ -365,8 +365,10 @@ function tsProperty(v: string | null | undefined): Date {
   return Number.isNaN(d.getTime()) ? new Date() : d;
 }
 
-// Pipedrive v2 wants `YYYY-MM-DD HH:MM:SS` in UTC — no millis, no 'Z'.
+// Pipedrive v2 expects RFC 3339 in the form `2025-01-01T10:20:00Z` —
+// T separator, Z suffix, NO fractional seconds (the default
+// Date.toISOString() includes `.000` which Pipedrive rejects with a
+// "not a valid datetime" 400).
 function formatPipedriveDateTime(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  return d.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
