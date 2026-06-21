@@ -407,12 +407,17 @@ model PendingOfflineConversion {
   /// Order ID for purchase-style conversions (helps Google dedupe at their end).
   orderId            String?  @map("order_id")
 
-  /// 'hubspot' | 'pipedrive' | 'zoho' | 'csv' | 'manual' | 'ga4_offline'
+  /// 'hubspot' | 'pipedrive' | 'csv' | 'manual' | 'ga4_offline'
+  /// (Zoho was removed in v1; status string allows future re-add without a migration.)
   source             String
   /// Foreign-system unique ID (e.g. HubSpot deal ID) — used for dedupe.
   externalId         String?  @map("external_id")
 
-  status             String   @default("pending") // pending | uploaded | failed
+  // pending | uploaded | failed | deferred_data_manager
+  // (deferred_data_manager rows are queued for the Phase B6.2 migration
+  //  to the Google Data Manager API — they survive UploadClickConversions
+  //  being deprecated for new accounts so no data is lost.)
+  status             String   @default("pending")
   attempts           Int      @default(0)
   lastError          String?  @map("last_error")
   uploadedAt         DateTime? @map("uploaded_at")

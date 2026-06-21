@@ -56,6 +56,7 @@ import {
   getCrmOAuthState,
   getGa4ConnectionState,
   getSnippets,
+  getTestEventSnippet,
   listCrmPipelines,
   listGa4KeyEvents,
   listGa4Properties,
@@ -192,9 +193,9 @@ const SOURCE_OPTIONS: SourceOption[] = [
     id: "offline_csv",
     label: "Offline CSV upload",
     helper:
-      "Upload a list of {gclid, conversion date} from your internal system. Good for back-fills + custom integrations.",
+      "Upload a list of {gclid, conversion date} from your internal system. Good for back-fills + custom integrations. — UI in progress; backend ready.",
     icon: ShieldCheck,
-    available: true,
+    available: false,
   },
 ];
 
@@ -1133,6 +1134,9 @@ function SnippetSheet({
     ReturnType<typeof getSnippets>
   > | null>(null);
   const [tab, setTab] = useState<"gtag" | "gtm">("gtag");
+  const [testEvent, setTestEvent] = useState<
+    Awaited<ReturnType<typeof getTestEventSnippet>> | null
+  >(null);
 
   // Lazy fetch on mount.
   useEffect(() => {
@@ -1147,6 +1151,13 @@ function SnippetSheet({
       await markTagInstalled(conversionActionId, accountId, true);
       router.refresh();
       onClose();
+    });
+  }
+
+  function fireTestEvent() {
+    startTransition(async () => {
+      const r = await getTestEventSnippet(conversionActionId);
+      setTestEvent(r);
     });
   }
 
@@ -1256,6 +1267,45 @@ function SnippetSheet({
               </div>
             </div>
           )}
+
+          {/* Send test event — proves the snippet works BEFORE live
+              traffic depends on it. We don't actually fire from our
+              server; gtag is client-side, so we just hand the customer
+              a DevTools-paste snippet. */}
+          <div className="rounded-md border border-border bg-card p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[12.5px] font-medium">Send a test event</div>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Verify the snippet is wired before going live.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={fireTestEvent}
+                disabled={pending}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[11.5px] font-medium hover:bg-muted disabled:opacity-50"
+              >
+                Generate test snippet
+              </button>
+            </div>
+            {testEvent && testEvent.ok && (
+              <div className="mt-3 grid gap-2">
+                <CodeBlock
+                  label="Paste into your site's DevTools console"
+                  code={testEvent.consoleSnippet}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {testEvent.verifyInstructions}
+                </p>
+              </div>
+            )}
+            {testEvent && !testEvent.ok && (
+              <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+                {testEvent.error}
+              </p>
+            )}
+          </div>
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] text-muted-foreground">

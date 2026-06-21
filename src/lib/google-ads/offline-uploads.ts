@@ -191,6 +191,15 @@ export async function uploadPendingForAccount(opts: {
   // ConversionsRequest at runtime, but its .d.ts signature insists on
   // the strict proto class. Cast through unknown — same pattern other
   // SDK wrappers in this codebase use.
+  //
+  // KNOWN ISSUE (B6.2): Google deprecated UploadClickConversions for new
+  // integrations starting 2026; new Ads accounts get a clean rejection
+  // pointing to the Data Manager API. Existing/grandfathered accounts
+  // can still use this endpoint. The migration is tracked as a separate
+  // task — see Phase B6.2 in PROGRESS.md or the backlog. Until that
+  // ships, we detect the deprecation error explicitly and pause those
+  // rows in a 'deferred_data_manager' status so they survive for the
+  // future Data Manager backfill instead of being lost.
   let response: services.UploadClickConversionsResponse;
   try {
     response = await customer.conversionUploads.uploadClickConversions({
@@ -200,21 +209,31 @@ export async function uploadPendingForAccount(opts: {
       validate_only: false,
     } as unknown as services.UploadClickConversionsRequest);
   } catch (e) {
-    // Whole batch died — mark every row as failed with the error.
+    // Whole batch died — categorize the error so customers see what's
+    // actually wrong (auth issue vs deprecation vs invalid data).
     const errMsg = extractGoogleError(e);
+    const isDeprecation =
+      errMsg.toLowerCase().includes("data manager api") ||
+      errMsg
+        .toLowerCase()
+        .includes("uploadclickconversions is limited to existing users");
+    const newStatus = isDeprecation ? "deferred_data_manager" : "failed";
+    const surface = isDeprecation
+      ? "Google migrated this endpoint to the new Data Manager API for new accounts. Your conversions are safely queued — they'll auto-upload once we ship the migration."
+      : errMsg;
     await db.pendingOfflineConversion.updateMany({
       where: { id: { in: pending.map((p) => p.id) } },
       data: {
-        status: "failed",
+        status: newStatus,
         attempts: { increment: 1 },
-        lastError: errMsg,
+        lastError: surface,
       },
     });
     return {
       accountId: opts.accountId,
       uploaded: 0,
       failed: pending.length,
-      errors: [errMsg],
+      errors: [surface],
     };
   }
 

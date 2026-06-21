@@ -290,6 +290,70 @@ export async function createGa4Conversion(
 }
 
 // ===========================================================================
+// "Send test event" — Phase B4.1
+//
+// Returns a ready-to-paste JS snippet the customer pastes into their
+// browser DevTools console while on a page that has the gtag base tag
+// installed. Firing it manually proves the snippet is wired correctly
+// BEFORE live traffic depends on it. Doesn't actually call any API
+// from our side — we just give them the snippet (Google's gtag fires
+// client-side anyway).
+// ===========================================================================
+
+export type TestEventSnippet = {
+  ok: true;
+  /// The JS the customer pastes in DevTools console on a page that
+  /// already has the gtag base tag loaded (e.g. their thank-you page).
+  consoleSnippet: string;
+  /// Where to look afterward to confirm the fire.
+  verifyInstructions: string;
+};
+
+export async function getTestEventSnippet(
+  conversionActionId: string,
+): Promise<ActionResult<TestEventSnippet>> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Sign-in required." };
+
+  const action = await db.conversionAction.findFirst({
+    where: { id: conversionActionId },
+    include: { account: true },
+  });
+  if (!action) return { ok: false, error: "Conversion action not found." };
+  if (action.account.userId !== session.user.id) {
+    return { ok: false, error: "Not your conversion action." };
+  }
+  if (!action.providerConversionId) {
+    return {
+      ok: false,
+      error: "Action isn't live in Google yet — can't generate a test event.",
+    };
+  }
+
+  const awId = `AW-${action.account.customerId.replace(/-/g, "")}`;
+  const sendTo = `${awId}/${action.providerConversionId}`;
+  const consoleSnippet = `// 1) Open your site in Chrome
+// 2) Confirm the base gtag is loaded by typing in DevTools console:
+//    typeof gtag === 'function'
+//    (should return true)
+// 3) Paste + run this to fire a test conversion:
+
+gtag('event', 'conversion', {
+  'send_to': '${sendTo}',
+  'value': 1.0,
+  'currency': '${action.account.currencyCode ?? "USD"}',
+  'transaction_id': 'test-' + Date.now()
+});`;
+
+  return {
+    ok: true,
+    consoleSnippet,
+    verifyInstructions:
+      "Within 5 minutes click 'Check status' on this row. Once Google has processed the fire, lastConversionAt will tick. Tag Assistant Chrome extension also shows the fire in real time.",
+  };
+}
+
+// ===========================================================================
 // B4 — Check-fire (per-row "Check status" button)
 // ===========================================================================
 
