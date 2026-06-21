@@ -460,10 +460,13 @@ export async function createGa4ConversionAction(
       return {
         ok: false,
         error:
-          "Google Ads doesn't allow creating GA4-linked conversion actions via API. " +
-          "1) Open Google Ads → Tools → Conversions → Goals → New conversion → choose 'Import' → 'Google Analytics 4 properties'. " +
-          `2) Pick property '${input.ga4PropertyName}' (${input.ga4PropertyId}) and event '${input.ga4EventName}'. ` +
-          "3) Save in Google Ads — our next sync will pull it in automatically.",
+          "Google Ads doesn't allow creating GA4-linked conversion actions via API — must be created in the Google Ads UI. " +
+          "Real path that works in 2026: " +
+          "1) Google Ads → Tools → Conversions → Goals → Summary → + New conversion action. " +
+          "2) Pick 'Conversion on a website' → enter your site URL → Google scans the page. " +
+          `3) If your GA4 tag is detected on scan, pick the 'Import GA4 events' option, then pick property '${input.ga4PropertyName}' (${input.ga4PropertyId}) and event '${input.ga4EventName}'. ` +
+          "4) Save in Google Ads. Click 'Import now' on the account detail page in our app — the new action will appear in this hub. " +
+          "(If the scan doesn't detect GA4, confirm the property is linked in Tools → Data Manager → Connected Products, and that at least one event is marked as a Key event in GA4 → Admin → Events.)",
       };
     }
     return { ok: false, error: raw };

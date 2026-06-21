@@ -756,9 +756,39 @@ function CreateSheet({
       >
         <div className="grid gap-5">
           <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.05] p-3 text-[11.5px] text-amber-800">
-            <strong>Before this works:</strong> in Google Ads → Tools →
-            Linked accounts, link this Google Ads account to your GA4
-            property. Then come back here.
+            <strong>Google rejects API-created GA4 conversion actions.</strong>{" "}
+            You have to create them in the Google Ads UI yourself, then we&apos;ll
+            mirror them automatically on the next import. The real path that
+            works in 2026:
+            <ol className="ml-4 mt-2 list-decimal space-y-0.5">
+              <li>
+                Google Ads → <strong>Tools → Data Manager → Connected Products</strong>{" "}
+                — confirm your GA4 property is linked (re-link if "blank
+                screen" / glitch).
+              </li>
+              <li>
+                In GA4 → <strong>Admin → Events</strong> — mark at least one event
+                as <strong>Key event</strong>.
+              </li>
+              <li>
+                Google Ads → <strong>Tools → Conversions → Goals → Summary</strong>{" "}
+                → <strong>+ New conversion action</strong>.
+              </li>
+              <li>
+                Pick <strong>Conversion on a website</strong> → enter your site URL
+                → Google scans the page → if it sees your GA4 tag, you&apos;ll
+                get the option to <strong>import GA4 events</strong>. Pick events
+                → Save.
+              </li>
+              <li>
+                Back here → click <strong>Import now</strong> on the account page
+                or trigger the sync — the new action appears in this hub.
+              </li>
+            </ol>
+            <p className="mt-2">
+              Use the picker below to confirm WHICH property + key event to
+              import — saves you guessing in Google&apos;s UI.
+            </p>
           </div>
 
           <Ga4PropertyEventPicker
