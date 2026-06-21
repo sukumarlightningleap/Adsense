@@ -771,7 +771,7 @@ function CreateSheet({
                 as <strong>Key event</strong>.
               </li>
               <li>
-                Google Ads → <strong>Tools → Goals → Conversions → Summary</strong>{" "}
+                Google Ads → <strong>Goals → Conversions → Summary</strong>{" "}
                 → <strong>+ New conversion action</strong>.
               </li>
               <li>
@@ -953,7 +953,7 @@ function CreateSheet({
         <div className="mb-4 rounded-md border border-amber-500/30 bg-amber-500/[0.05] p-3 text-[11.5px] text-amber-800">
           Google will swap your phone number on call-only ads with a
           Google-provided forwarding number. Configure the forwarding
-          number under Google Ads → Tools → Goals → Conversions after this
+          number under Google Ads → Goals → Conversions after this
           action is created.
         </div>
       )}
