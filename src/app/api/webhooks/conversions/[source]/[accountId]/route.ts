@@ -127,7 +127,7 @@ export async function POST(
     valueMicros,
     currencyCode: currency,
     orderId,
-    source: source as "hubspot" | "pipedrive" | "zoho",
+    source: source as "hubspot" | "pipedrive",
     externalId,
   });
   if (!enqueued.ok) {

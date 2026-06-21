@@ -625,7 +625,6 @@ export async function listCrmPipelines(
     const pipelines = await listPipelines({
       provider,
       accessToken: token,
-      region: conn.region,
     });
     return { ok: true, pipelines };
   } catch (e) {

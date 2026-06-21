@@ -72,7 +72,6 @@ export async function GET(
     tokens = await exchangeCodeForTokens({
       provider,
       code,
-      region: state.region,
     });
   } catch (e) {
     return errPage(
@@ -84,7 +83,6 @@ export async function GET(
   await saveConnection({
     accountId: account.id,
     provider,
-    region: state.region,
     tokens,
   });
 
@@ -96,7 +94,6 @@ export async function GET(
       targetId: account.id,
       payload: {
         provider,
-        region: state.region ?? null,
         scope: tokens.scope ?? null,
       },
     },

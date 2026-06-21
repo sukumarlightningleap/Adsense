@@ -12,9 +12,13 @@
  * and return normalized shapes the poller can iterate.
  */
 
-export type CrmProviderId = "hubspot" | "pipedrive" | "zoho";
+export type CrmProviderId = "hubspot" | "pipedrive";
 
-export type ZohoRegion = "us" | "eu" | "in" | "au" | "jp";
+// Placeholder for future regionable providers. Kept as a wider string so
+// callers don't need to change if we re-introduce one. (Zoho was removed
+// in favour of HubSpot/Pipedrive for v1; if you bring it back, restore
+// the union type to whatever the new provider requires.)
+export type ZohoRegion = string;
 
 export type NormalizedDeal = {
   id: string;                       // Provider-side deal ID
@@ -75,50 +79,18 @@ export const CRM_PROVIDERS: Record<CrmProviderId, CrmProviderConfig> = {
     clientSecretEnv: "PIPEDRIVE_CLIENT_SECRET",
     needsRegion: false,
   },
-  zoho: {
-    id: "zoho",
-    label: "Zoho CRM",
-    // Zoho uses region-specific data centers — accounts.zoho.<tld>.
-    authUrl: (region) => `https://accounts.zoho.${zohoTld(region)}/oauth/v2/auth`,
-    tokenUrl: (region) =>
-      `https://accounts.zoho.${zohoTld(region)}/oauth/v2/token`,
-    scope: "ZohoCRM.modules.deals.READ ZohoCRM.modules.contacts.READ",
-    clientIdEnv: "ZOHO_CLIENT_ID",
-    clientSecretEnv: "ZOHO_CLIENT_SECRET",
-    needsRegion: true,
-  },
 };
 
 export function isCrmProvider(s: string): s is CrmProviderId {
-  return s === "hubspot" || s === "pipedrive" || s === "zoho";
-}
-
-export function zohoTld(region: ZohoRegion): string {
-  switch (region) {
-    case "eu":
-      return "eu";
-    case "in":
-      return "in";
-    case "au":
-      return "com.au";
-    case "jp":
-      return "jp";
-    case "us":
-    default:
-      return "com";
-  }
+  return s === "hubspot" || s === "pipedrive";
 }
 
 /**
- * Per-provider API base for data calls (post-OAuth). For Zoho this
- * depends on region.
+ * Per-provider API base for data calls (post-OAuth).
  */
-export function apiBase(provider: CrmProviderId, region?: string | null): string {
+export function apiBase(provider: CrmProviderId): string {
   if (provider === "hubspot") return "https://api.hubapi.com";
-  if (provider === "pipedrive") return "https://api.pipedrive.com";
-  // Zoho: data calls go to `www.zohoapis.<tld>`.
-  const r = (region ?? "us") as ZohoRegion;
-  return `https://www.zohoapis.${zohoTld(r)}`;
+  return "https://api.pipedrive.com";
 }
 
 /**
@@ -126,7 +98,6 @@ export function apiBase(provider: CrmProviderId, region?: string | null): string
  */
 export function authorizeUrl(opts: {
   provider: CrmProviderId;
-  region?: ZohoRegion;
   state: string;
   redirectUri: string;
 }): string {
@@ -138,9 +109,7 @@ export function authorizeUrl(opts: {
     );
   }
   const base =
-    typeof cfg.authUrl === "function"
-      ? cfg.authUrl(opts.region ?? "us")
-      : cfg.authUrl;
+    typeof cfg.authUrl === "function" ? cfg.authUrl("us") : cfg.authUrl;
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: opts.redirectUri,

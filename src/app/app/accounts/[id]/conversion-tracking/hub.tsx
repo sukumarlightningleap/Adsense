@@ -1552,7 +1552,7 @@ function CrmConnectSheet({
       <div className="grid gap-5">
         {/* Source tabs */}
         <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-[11.5px]">
-          {(["hubspot", "pipedrive", "zoho"] as const).map((s) => (
+          {(["hubspot", "pipedrive"] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -2569,7 +2569,7 @@ function capitalize(s: string): string {
 // ---------------------------------------------------------------------------
 
 type SourceTile = {
-  key: "ga4" | "hubspot" | "pipedrive" | "zoho";
+  key: "ga4" | "hubspot" | "pipedrive";
   label: string;
   connected: boolean;
   detail: string;
@@ -2581,11 +2581,10 @@ function ConnectedSourcesPanel({ accountId }: { accountId: string }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [ga4, hub, pipe, zoho] = await Promise.all([
+      const [ga4, hub, pipe] = await Promise.all([
         getGa4ConnectionState(accountId),
         getCrmOAuthState(accountId, "hubspot"),
         getCrmOAuthState(accountId, "pipedrive"),
-        getCrmOAuthState(accountId, "zoho"),
       ]);
       if (cancelled) return;
       const next: SourceTile[] = [
@@ -2614,15 +2613,6 @@ function ConnectedSourcesPanel({ accountId }: { accountId: string }) {
           detail:
             pipe.ok && pipe.state.connected
               ? lastPollLabel(pipe.state.lastPolledAt)
-              : "Poll qualified deals",
-        },
-        {
-          key: "zoho",
-          label: "Zoho",
-          connected: zoho.ok ? zoho.state.connected : false,
-          detail:
-            zoho.ok && zoho.state.connected
-              ? lastPollLabel(zoho.state.lastPolledAt)
               : "Poll qualified deals",
         },
       ];

@@ -43,15 +43,12 @@ const GCLID_FIELD_KEYS = [
 export async function listPipelines(opts: {
   provider: CrmProviderId;
   accessToken: string;
-  region?: string | null;
 }): Promise<NormalizedPipeline[]> {
   switch (opts.provider) {
     case "hubspot":
       return listHubspotPipelines(opts.accessToken);
     case "pipedrive":
       return listPipedrivePipelines(opts.accessToken);
-    case "zoho":
-      return listZohoLayouts(opts.accessToken, opts.region);
   }
 }
 
@@ -59,15 +56,12 @@ export async function listRecentDeals(opts: {
   provider: CrmProviderId;
   accessToken: string;
   sinceDate: Date;
-  region?: string | null;
 }): Promise<NormalizedDeal[]> {
   switch (opts.provider) {
     case "hubspot":
       return listHubspotDeals(opts.accessToken, opts.sinceDate);
     case "pipedrive":
       return listPipedriveDeals(opts.accessToken, opts.sinceDate);
-    case "zoho":
-      return listZohoDeals(opts.accessToken, opts.sinceDate, opts.region);
   }
 }
 
@@ -305,89 +299,6 @@ async function resolvePipedriveGclidFieldKey(
     }
   }
   return null;
-}
-
-// ===========================================================================
-// Zoho
-// ===========================================================================
-
-async function listZohoLayouts(
-  accessToken: string,
-  region: string | null | undefined,
-): Promise<NormalizedPipeline[]> {
-  // Zoho doesn't have "pipelines" in the HubSpot sense; it has Layouts +
-  // pick-list values for the `Stage` field on Deals. We approximate
-  // pipelines by listing the Deals module's pick-list values.
-  type Resp = {
-    fields?: Array<{
-      api_name?: string;
-      pick_list_values?: Array<{ display_value: string; actual_value: string }>;
-    }>;
-  };
-  const res = await fetch(
-    `${apiBase("zoho", region)}/crm/v6/settings/fields?module=Deals`,
-    {
-      headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
-    },
-  );
-  if (!res.ok) throw new Error(`Zoho fields fetch failed: ${res.status}`);
-  const json = (await res.json()) as Resp;
-  const stageField = (json.fields ?? []).find((f) => f.api_name === "Stage");
-  const stages = (stageField?.pick_list_values ?? []).map((s) => ({
-    id: s.actual_value,
-    name: s.display_value,
-  }));
-  return [
-    {
-      id: "default",
-      name: "Deals",
-      stages,
-    },
-  ];
-}
-
-async function listZohoDeals(
-  accessToken: string,
-  since: Date,
-  region: string | null | undefined,
-): Promise<NormalizedDeal[]> {
-  type Resp = {
-    data?: Array<{
-      id: string;
-      Stage?: string;
-      Amount?: number;
-      Modified_Time?: string;
-      [custom: string]: unknown;
-    }>;
-  };
-  // Zoho's Modified_Since header gates the response. We also sort by
-  // Modified_Time asc so pagination is deterministic.
-  const url = new URL(`${apiBase("zoho", region)}/crm/v6/Deals`);
-  url.searchParams.set("per_page", String(PAGE_LIMIT));
-  url.searchParams.set("sort_by", "Modified_Time");
-  url.searchParams.set("sort_order", "asc");
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-      "If-Modified-Since": since.toUTCString(),
-    },
-  });
-  if (res.status === 304) return [];
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Zoho deal list failed: ${res.status} ${text}`);
-  }
-  const json = (await res.json()) as Resp;
-  return (json.data ?? []).map((d) => ({
-    id: d.id,
-    stageId: d.Stage ?? "",
-    stageName: d.Stage ?? "",
-    pipelineId: "default",
-    amount: typeof d.Amount === "number" ? d.Amount : null,
-    currency: null,
-    updatedAt: d.Modified_Time ? new Date(d.Modified_Time) : new Date(),
-    gclid: pickGclid(d as Record<string, unknown>),
-  }));
 }
 
 // ===========================================================================

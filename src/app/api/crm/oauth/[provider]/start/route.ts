@@ -1,22 +1,16 @@
 /**
- * GET /api/crm/oauth/[provider]/start?accountId=...&region=us
+ * GET /api/crm/oauth/[provider]/start?accountId=...
  *
- * Kicks off the OAuth flow for HubSpot / Pipedrive / Zoho. Verifies the
- * caller owns the target AdsAccount, signs state, redirects to the
- * provider's consent screen.
+ * Kicks off the OAuth flow for HubSpot / Pipedrive. Verifies the caller
+ * owns the target AdsAccount, signs state, redirects to the provider's
+ * consent screen.
  */
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import {
-  authorizeUrl,
-  isCrmProvider,
-  type ZohoRegion,
-} from "@/lib/crm/providers";
+import { authorizeUrl, isCrmProvider } from "@/lib/crm/providers";
 import { redirectUri, signState } from "@/lib/crm/oauth";
-
-const ZOHO_REGIONS: ZohoRegion[] = ["us", "eu", "in", "au", "jp"];
 
 export async function GET(
   req: Request,
@@ -63,14 +57,6 @@ export async function GET(
     );
   }
 
-  const regionRaw = url.searchParams.get("region");
-  const region =
-    provider === "zoho" && regionRaw && ZOHO_REGIONS.includes(regionRaw as ZohoRegion)
-      ? (regionRaw as ZohoRegion)
-      : provider === "zoho"
-        ? "us"
-        : undefined;
-
   const returnTo =
     url.searchParams.get("returnTo") ||
     `/app/accounts/${accountId}/conversion-tracking`;
@@ -81,12 +67,10 @@ export async function GET(
       uid: session.user.id,
       accountId,
       provider,
-      region,
       returnTo,
     });
     consentUrl = authorizeUrl({
       provider,
-      region,
       state,
       redirectUri: redirectUri(provider),
     });

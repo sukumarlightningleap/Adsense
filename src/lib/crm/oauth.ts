@@ -19,11 +19,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 import { decryptToken, encryptToken } from "@/lib/crypto/token-vault";
 
-import {
-  CRM_PROVIDERS,
-  type CrmProviderId,
-  type ZohoRegion,
-} from "./providers";
+import { CRM_PROVIDERS, type CrmProviderId } from "./providers";
 
 const STATE_TTL_SECONDS = 600;
 
@@ -35,7 +31,6 @@ type StatePayload = {
   uid: string;
   accountId: string;
   provider: CrmProviderId;
-  region?: ZohoRegion;
   ts: number;
   nonce: string;
   returnTo?: string;
@@ -116,7 +111,6 @@ export type ExchangeResult = {
 export async function exchangeCodeForTokens(opts: {
   provider: CrmProviderId;
   code: string;
-  region?: ZohoRegion;
 }): Promise<ExchangeResult> {
   const cfg = CRM_PROVIDERS[opts.provider];
   const clientId = process.env[cfg.clientIdEnv]?.trim();
@@ -127,9 +121,7 @@ export async function exchangeCodeForTokens(opts: {
     );
   }
   const tokenUrl =
-    typeof cfg.tokenUrl === "function"
-      ? cfg.tokenUrl(opts.region ?? "us")
-      : cfg.tokenUrl;
+    typeof cfg.tokenUrl === "function" ? cfg.tokenUrl("us") : cfg.tokenUrl;
 
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -158,7 +150,6 @@ export async function exchangeCodeForTokens(opts: {
 export async function refreshAccessToken(opts: {
   provider: CrmProviderId;
   refreshToken: string;
-  region?: string | null;
 }): Promise<ExchangeResult> {
   const cfg = CRM_PROVIDERS[opts.provider];
   const clientId = process.env[cfg.clientIdEnv]?.trim();
@@ -169,9 +160,7 @@ export async function refreshAccessToken(opts: {
     );
   }
   const tokenUrl =
-    typeof cfg.tokenUrl === "function"
-      ? cfg.tokenUrl((opts.region as ZohoRegion) ?? "us")
-      : cfg.tokenUrl;
+    typeof cfg.tokenUrl === "function" ? cfg.tokenUrl("us") : cfg.tokenUrl;
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -207,13 +196,10 @@ function normalizeTokenResponse(
   const scope = typeof json.scope === "string" ? json.scope : null;
   let providerAccountId: string | null = null;
   if (provider === "hubspot") {
-    // HubSpot wants you to call /oauth/v1/access-tokens/<token> to get
-    // the portal_id. We do it lazily in `verifyHubspotToken` below.
+    // HubSpot's portal_id requires a separate /oauth/v1/access-tokens/<token>
+    // round-trip. We don't need it for the core flow so leave null.
     providerAccountId = null;
   } else if (provider === "pipedrive") {
-    providerAccountId =
-      (json.api_domain as string | undefined) ?? null;
-  } else if (provider === "zoho") {
     providerAccountId =
       (json.api_domain as string | undefined) ?? null;
   }
@@ -241,7 +227,6 @@ function stringOrThrow(v: unknown, field: string): string {
 export async function saveConnection(opts: {
   accountId: string;
   provider: CrmProviderId;
-  region?: ZohoRegion;
   tokens: ExchangeResult;
 }) {
   const expiresAt = opts.tokens.expiresInSec
@@ -258,7 +243,6 @@ export async function saveConnection(opts: {
     create: {
       accountId: opts.accountId,
       provider: opts.provider,
-      region: opts.region ?? null,
       encryptedAccessToken: encryptToken(opts.tokens.accessToken),
       encryptedRefreshToken: opts.tokens.refreshToken
         ? encryptToken(opts.tokens.refreshToken)
@@ -268,7 +252,6 @@ export async function saveConnection(opts: {
       providerAccountId: opts.tokens.providerAccountId,
     },
     update: {
-      region: opts.region ?? null,
       encryptedAccessToken: encryptToken(opts.tokens.accessToken),
       // Only overwrite the refresh token if the new exchange returned
       // one. Some providers return a refresh token only on the FIRST
@@ -315,12 +298,10 @@ export async function getFreshAccessToken(connectionId: string): Promise<string>
   const exchanged = await refreshAccessToken({
     provider: conn.provider as CrmProviderId,
     refreshToken: refresh,
-    region: conn.region,
   });
   await saveConnection({
     accountId: conn.accountId,
     provider: conn.provider as CrmProviderId,
-    region: (conn.region as ZohoRegion) ?? undefined,
     tokens: exchanged,
   });
   return exchanged.accessToken;

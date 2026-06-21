@@ -90,7 +90,6 @@ export async function pollOne(connectionId: string): Promise<PollResult> {
     provider: conn.provider as CrmProviderId,
     accessToken,
     sinceDate: since,
-    region: conn.region,
   });
 
   let matched = 0;
@@ -123,7 +122,7 @@ export async function pollOne(connectionId: string): Promise<PollResult> {
       valueMicros,
       currencyCode: d.currency ?? null,
       orderId: null,
-      source: conn.provider as "hubspot" | "pipedrive" | "zoho",
+      source: conn.provider as "hubspot" | "pipedrive",
       externalId: `${conn.provider}-deal-${d.id}`,
     });
     if (res.ok) {

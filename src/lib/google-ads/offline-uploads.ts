@@ -40,7 +40,7 @@ export type EnqueueInput = {
   valueMicros?: bigint | null;
   currencyCode?: string | null;
   orderId?: string | null;
-  source: "hubspot" | "pipedrive" | "zoho" | "csv" | "manual" | "ga4_offline";
+  source: "hubspot" | "pipedrive" | "csv" | "manual" | "ga4_offline";
   externalId?: string | null;
 };
 

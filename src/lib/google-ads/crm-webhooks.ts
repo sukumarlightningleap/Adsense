@@ -20,9 +20,9 @@ import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 
-export type CrmSource = "hubspot" | "pipedrive" | "zoho";
+export type CrmSource = "hubspot" | "pipedrive";
 
-const ALLOWED_SOURCES: CrmSource[] = ["hubspot", "pipedrive", "zoho"];
+const ALLOWED_SOURCES: CrmSource[] = ["hubspot", "pipedrive"];
 
 // ===========================================================================
 // Config fetch / mutate
