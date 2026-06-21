@@ -17,7 +17,7 @@
  * lightweight in-place modals with absolute positioning + a backdrop.
  */
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Check,
   CheckCircle2,
@@ -237,6 +237,15 @@ export function ConversionTrackingHub({
           /app/accounts to set up tracking.
         </p>
       )}
+
+      {/* Success banner when bounced back from an OAuth callback. Reads
+          ?crm=hubspot&connected=1 / ?ga4=connected from the URL. */}
+      <ConnectSuccessBanner />
+
+      {/* Connected sources strip — shows which CRMs + GA4 are linked at
+          a glance, so the customer doesn't have to dig into the Add sheet
+          to confirm. */}
+      <ConnectedSourcesPanel accountId={accountId} />
 
       {/* Stats strip */}
       <section className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -2498,4 +2507,179 @@ function Ga4PropertyEventPicker({
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// ConnectSuccessBanner — reads ?crm=hubspot&connected=1 / ?ga4=connected
+// from the URL (set by our OAuth callback routes) and shows a green
+// success banner. Strips the params after first display so a refresh
+// doesn't re-show it.
+// ---------------------------------------------------------------------------
+
+function ConnectSuccessBanner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const crm = params.get("crm");
+    const crmConnected = params.get("connected") === "1";
+    const ga4Connected = params.get("ga4") === "connected";
+    let msg: string | null = null;
+    if (crm && crmConnected) {
+      msg = `${capitalize(crm)} connected. Map pipeline stages → conversion actions below to start counting offline conversions.`;
+    } else if (ga4Connected) {
+      msg = "GA4 connected. Pick properties + key events from a dropdown when adding GA4-based conversion actions.";
+    }
+    if (msg) {
+      setMessage(msg);
+      router.replace(pathname, { scroll: false });
+    }
+  }, [params, pathname, router]);
+
+  if (!message) return null;
+  return (
+    <div className="mt-4 flex items-start gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3">
+      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-700" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium text-emerald-900">Connected</div>
+        <p className="mt-0.5 text-[12px] text-emerald-800">{message}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => setMessage(null)}
+        className="text-[11px] text-emerald-800 hover:text-emerald-900"
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// ---------------------------------------------------------------------------
+// ConnectedSourcesPanel — single row showing GA4 + 3 CRMs and whether
+// each is connected. Click a tile to jump straight to its config in the
+// Add sheet (deferred; for now it's a static read-only summary). Renders
+// nothing until state loads.
+// ---------------------------------------------------------------------------
+
+type SourceTile = {
+  key: "ga4" | "hubspot" | "pipedrive" | "zoho";
+  label: string;
+  connected: boolean;
+  detail: string;
+};
+
+function ConnectedSourcesPanel({ accountId }: { accountId: string }) {
+  const [tiles, setTiles] = useState<SourceTile[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [ga4, hub, pipe, zoho] = await Promise.all([
+        getGa4ConnectionState(accountId),
+        getCrmOAuthState(accountId, "hubspot"),
+        getCrmOAuthState(accountId, "pipedrive"),
+        getCrmOAuthState(accountId, "zoho"),
+      ]);
+      if (cancelled) return;
+      const next: SourceTile[] = [
+        {
+          key: "ga4",
+          label: "GA4",
+          connected: ga4.ok ? ga4.state.connected : false,
+          detail:
+            ga4.ok && ga4.state.connected
+              ? ga4.state.oauthEmail ?? "connected"
+              : "Read GA4 properties + events",
+        },
+        {
+          key: "hubspot",
+          label: "HubSpot",
+          connected: hub.ok ? hub.state.connected : false,
+          detail:
+            hub.ok && hub.state.connected
+              ? lastPollLabel(hub.state.lastPolledAt)
+              : "Poll qualified deals",
+        },
+        {
+          key: "pipedrive",
+          label: "Pipedrive",
+          connected: pipe.ok ? pipe.state.connected : false,
+          detail:
+            pipe.ok && pipe.state.connected
+              ? lastPollLabel(pipe.state.lastPolledAt)
+              : "Poll qualified deals",
+        },
+        {
+          key: "zoho",
+          label: "Zoho",
+          connected: zoho.ok ? zoho.state.connected : false,
+          detail:
+            zoho.ok && zoho.state.connected
+              ? lastPollLabel(zoho.state.lastPolledAt)
+              : "Poll qualified deals",
+        },
+      ];
+      setTiles(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId]);
+
+  if (!tiles) return null;
+
+  return (
+    <section className="mt-6">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+        Connected sources
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {tiles.map((t) => (
+          <div
+            key={t.key}
+            className={cn(
+              "rounded-xl border bg-card p-3",
+              t.connected
+                ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+                : "border-border",
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-medium">{t.label}</span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md border px-1.5 py-0 font-mono text-[9.5px] font-semibold uppercase tracking-wider",
+                  t.connected
+                    ? "border-emerald-500/40 bg-emerald-500/[0.1] text-emerald-700"
+                    : "border-muted bg-muted text-muted-foreground",
+                )}
+              >
+                {t.connected ? "connected" : "off"}
+              </span>
+            </div>
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+              {t.detail}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function lastPollLabel(iso: string | null): string {
+  if (!iso) return "Polling daily — first run pending";
+  const d = new Date(iso);
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (secs < 120) return "Last poll: just now";
+  if (secs < 3600) return `Last poll: ${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `Last poll: ${Math.floor(secs / 3600)}h ago`;
+  return `Last poll: ${Math.floor(secs / 86400)}d ago`;
 }
