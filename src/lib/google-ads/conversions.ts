@@ -451,7 +451,22 @@ export async function createGa4ConversionAction(
     if (!rn) return { ok: false, error: "Google did not return a resource name." };
     resourceName = rn;
   } catch (e) {
-    return { ok: false, error: extractGoogleError(e) };
+    // GA4-linked ConversionAction types (GOOGLE_ANALYTICS_4_*) can't be
+    // created via the Google Ads API — Google only allows creating them
+    // through the Ads UI after linking Ads ↔ GA4. Surface a useful
+    // instruction instead of the raw error.
+    const raw = extractGoogleError(e);
+    if (raw.toLowerCase().includes("isn't supported")) {
+      return {
+        ok: false,
+        error:
+          "Google Ads doesn't allow creating GA4-linked conversion actions via API. " +
+          "1) Open Google Ads → Tools → Conversions → Goals → New conversion → choose 'Import' → 'Google Analytics 4 properties'. " +
+          `2) Pick property '${input.ga4PropertyName}' (${input.ga4PropertyId}) and event '${input.ga4EventName}'. ` +
+          "3) Save in Google Ads — our next sync will pull it in automatically.",
+      };
+    }
+    return { ok: false, error: raw };
   }
 
   const providerId = extractIdFromResourceName(resourceName);
