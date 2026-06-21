@@ -222,8 +222,11 @@ async function listPipedriveDeals(
       [custom: string]: unknown;
     }>;
   };
+  // Pipedrive's v2 deals API rejects ISO datetimes with fractional
+  // seconds and the 'Z' suffix — wants RFC-3339 / SQL-style
+  // 'YYYY-MM-DD HH:MM:SS' instead. Format manually from the UTC parts.
   const url = new URL(`${apiBase("pipedrive")}/api/v2/deals`);
-  url.searchParams.set("updated_since", since.toISOString());
+  url.searchParams.set("updated_since", formatPipedriveDateTime(since));
   url.searchParams.set("limit", String(PAGE_LIMIT));
   url.searchParams.set("sort_by", "update_time");
   url.searchParams.set("sort_direction", "asc");
@@ -360,4 +363,10 @@ function tsProperty(v: string | null | undefined): Date {
   if (Number.isFinite(ms) && ms > 0) return new Date(ms);
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+// Pipedrive v2 wants `YYYY-MM-DD HH:MM:SS` in UTC — no millis, no 'Z'.
+function formatPipedriveDateTime(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }

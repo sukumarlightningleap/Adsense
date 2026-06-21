@@ -2132,8 +2132,8 @@ function CrmOAuthPanel({
         </span>
       </div>
       <p className="mt-1 text-[11.5px] text-muted-foreground">
-        Connect once, we poll your CRM every 15 minutes for deals that
-        moved into a stage you map below.
+        Connect once, we poll your CRM daily for deals that moved into a
+        stage you map below. Hit Poll now anytime to scan immediately.
       </p>
 
       {!state?.connected && (
