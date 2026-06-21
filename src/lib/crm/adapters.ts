@@ -222,14 +222,23 @@ async function listPipedriveDeals(
       [custom: string]: unknown;
     }>;
   };
-  // Pipedrive's v2 deals API rejects ISO datetimes with fractional
-  // seconds and the 'Z' suffix — wants RFC-3339 / SQL-style
-  // 'YYYY-MM-DD HH:MM:SS' instead. Format manually from the UTC parts.
+  // Pipedrive v2 expects RFC 3339 (T separator + Z, no millis) for
+  // `updated_since`. Format helper at the bottom of this file.
   const url = new URL(`${apiBase("pipedrive")}/api/v2/deals`);
   url.searchParams.set("updated_since", formatPipedriveDateTime(since));
   url.searchParams.set("limit", String(PAGE_LIMIT));
   url.searchParams.set("sort_by", "update_time");
   url.searchParams.set("sort_direction", "asc");
+
+  // Resolve which deal-field hash key corresponds to the user's
+  // "gclid"-named custom field. Pipedrive returns custom field values
+  // keyed by hash, not display name — so we have to map field
+  // definitions first or we'll never see the value the user pasted.
+  // (`dealFields` is still a v1 endpoint as of Pipedrive's v2 rollout.)
+  const gclidFieldKey = await resolvePipedriveGclidFieldKey(accessToken).catch(
+    () => null,
+  );
+
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -238,16 +247,64 @@ async function listPipedriveDeals(
     throw new Error(`Pipedrive deal list failed: ${res.status} ${text}`);
   }
   const json = (await res.json()) as Resp;
-  return (json.data ?? []).map((d) => ({
-    id: String(d.id),
-    stageId: String(d.stage_id),
-    stageName: String(d.stage_id),
-    pipelineId: String(d.pipeline_id),
-    amount: typeof d.value === "number" ? d.value : null,
-    currency: typeof d.currency === "string" ? d.currency : null,
-    updatedAt: d.update_time ? new Date(d.update_time) : new Date(),
-    gclid: pickGclid(d as Record<string, unknown>),
-  }));
+  return (json.data ?? []).map((d) => {
+    const flatGclid = pickGclid(d as Record<string, unknown>);
+    const customFields =
+      typeof d.custom_fields === "object" && d.custom_fields !== null
+        ? (d.custom_fields as Record<string, unknown>)
+        : null;
+    const customFieldGclid = customFields
+      ? pickGclid(customFields) ??
+        (gclidFieldKey && typeof customFields[gclidFieldKey] === "string"
+          ? (customFields[gclidFieldKey] as string)
+          : null)
+      : null;
+    return {
+      id: String(d.id),
+      stageId: String(d.stage_id),
+      stageName: String(d.stage_id),
+      pipelineId: String(d.pipeline_id),
+      amount: typeof d.value === "number" ? d.value : null,
+      currency: typeof d.currency === "string" ? d.currency : null,
+      updatedAt: d.update_time ? new Date(d.update_time) : new Date(),
+      gclid: flatGclid ?? customFieldGclid,
+    };
+  });
+}
+
+/**
+ * Walk Pipedrive's deal-field definitions and return the hash key of
+ * any field named/labelled like `gclid` or `google_click_id`. Returns
+ * null if no matching field exists or the API call fails (caller
+ * already swallows errors).
+ */
+async function resolvePipedriveGclidFieldKey(
+  accessToken: string,
+): Promise<string | null> {
+  type FieldsResp = {
+    data?: Array<{
+      key?: string;
+      name?: string;
+    }>;
+  };
+  const res = await fetch(`${apiBase("pipedrive")}/api/v1/dealFields`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as FieldsResp;
+  for (const f of json.data ?? []) {
+    const name = f.name?.toLowerCase() ?? "";
+    if (
+      name === "gclid" ||
+      name === "google click id" ||
+      name === "google_click_id" ||
+      name.includes("gclid") ||
+      name.includes("google click")
+    ) {
+      return f.key ?? null;
+    }
+  }
+  return null;
 }
 
 // ===========================================================================
@@ -338,15 +395,33 @@ async function listZohoDeals(
 // ===========================================================================
 
 function pickGclid(props: Record<string, unknown>): string | null {
+  // Exact key match first.
   for (const key of GCLID_FIELD_KEYS) {
     const v = props[key];
     if (typeof v === "string" && v.length > 0) return v;
   }
-  // Also try common custom-field key patterns
+  // Pattern match on string values at the top level.
   for (const [k, v] of Object.entries(props)) {
     if (typeof v !== "string" || v.length === 0) continue;
     const lk = k.toLowerCase();
     if (lk.includes("gclid") || lk.includes("google_click")) return v;
+  }
+  // Recurse ONE level into nested objects — Pipedrive v2 nests custom
+  // fields under `custom_fields` with hashed keys, but if any property
+  // in there is named-like-a-gclid we'll catch it.
+  for (const v of Object.values(props)) {
+    if (typeof v !== "object" || v === null) continue;
+    if (Array.isArray(v)) continue;
+    const nested = v as Record<string, unknown>;
+    for (const key of GCLID_FIELD_KEYS) {
+      const nv = nested[key];
+      if (typeof nv === "string" && nv.length > 0) return nv;
+    }
+    for (const [k, nv] of Object.entries(nested)) {
+      if (typeof nv !== "string" || nv.length === 0) continue;
+      const lk = k.toLowerCase();
+      if (lk.includes("gclid") || lk.includes("google_click")) return nv;
+    }
   }
   return null;
 }
