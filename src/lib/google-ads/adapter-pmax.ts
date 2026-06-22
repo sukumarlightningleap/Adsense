@@ -446,11 +446,22 @@ async function createImageAssets(
   // ORIGINAL; we auto-fetch the size that matches the PMAX field type).
   const resolved = await Promise.all(picks.map(resolveAssetForRole));
 
-  // Upload all images in one batched create
+  // Upload all images in one batched create.
+  //
+  // `name` is required by Google for IMAGE assets and must be unique
+  // within the customer. Google's behaviour on collision:
+  //   - same name + same bytes → reuses existing asset (idempotent retry)
+  //   - same name + different bytes → silently suffixes the name
+  //   - different name + same bytes → drops the new name, reuses existing
+  // We embed timestamp + index so multi-asset uploads in one launch are
+  // distinct and retries with the same images stay idempotent (same SHA
+  // → Google dedups regardless of name).
+  const nameTs = Date.now();
   const result = await customer.assets.create(
     resolved.map(
-      ({ bytes }) =>
+      ({ bytes, role }, i) =>
         ({
+          name: `PMax-${role.toLowerCase().replace(/_/g, "-")}-${nameTs}-${i}`,
           image_asset: { data: Buffer.from(new Uint8Array(bytes)) },
         }) as Parameters<typeof customer.assets.create>[0][number],
     ),

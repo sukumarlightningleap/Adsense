@@ -88,6 +88,8 @@ export async function launchCampaignAction(
     account: {
       customerId: campaign.account.customerId,
       loginCustomerId: campaign.account.loginCustomerId,
+      mccCustomerId: campaign.account.mccCustomerId,
+      oauthRefreshToken: campaign.account.oauthRefreshToken,
       demoMode: campaign.account.demoMode,
     },
   });

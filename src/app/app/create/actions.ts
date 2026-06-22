@@ -22,11 +22,15 @@
  *     client can redirect to its detail page (where the existing
  *     LaunchCard pushes it live to Google).
  */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { planCampaign, type CampaignPlan } from "@/lib/ai/architect";
+import { persistGeneratedImage } from "@/lib/ai/asset-persistence";
 import {
   generateClusteredPmaxCopy,
   generateClusteredSearchCopy,
@@ -49,6 +53,8 @@ import {
   type CountryCode,
 } from "@/lib/wizard/schema";
 import { buildCampaignYaml } from "@/lib/wizard/yaml-builder";
+
+import { MANUAL_ASSET_FILES } from "./manual-mode";
 
 export type CreateBrief = {
   brandName: string;
@@ -294,6 +300,108 @@ export async function generateImagesAction(
       error: e instanceof Error ? e.message : "Image generation failed.",
     };
   }
+}
+
+// ===========================================================================
+// Manual test mode — bypasses Gemini entirely. Reads hand-cropped image
+// files from `public/manual-test-assets/`, ingests each as an Asset row
+// tree (parent + Sharp-resized variants), and returns the per-slot IDs
+// the PMax adapter expects. Used by the "Manual mode" toggle on the
+// Create Campaign page to drive an end-to-end Google Ads launch test
+// without burning AI quota.
+// ===========================================================================
+
+export type LoadManualAssetsResult =
+  | { ok: true; ids: GeneratedAssetIds; loaded: string[]; skipped: string[] }
+  | { ok: false; error: string };
+
+export async function loadManualTestAssets(
+  accountId?: string,
+): Promise<LoadManualAssetsResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Sign-in required." };
+  if (session.user.role === "demo") {
+    return { ok: false, error: "Demo users can't run manual mode." };
+  }
+
+  let accountIdToUse: string | null = null;
+  if (accountId) {
+    const account = await db.adsAccount.findFirst({
+      where: { id: accountId, userId: session.user.id, demoMode: false },
+      select: { id: true },
+    });
+    accountIdToUse = account?.id ?? null;
+  }
+
+  const ids: GeneratedAssetIds = {};
+  const loaded: string[] = [];
+  const skipped: string[] = [];
+
+  for (const spec of MANUAL_ASSET_FILES) {
+    const fullPath = join(process.cwd(), "public", "manual-test-assets", spec.filename);
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(fullPath);
+    } catch {
+      if (spec.required) {
+        return {
+          ok: false,
+          error: `Missing required image \`${spec.filename}\` in public/manual-test-assets/. See README.md in that folder.`,
+        };
+      }
+      skipped.push(spec.filename);
+      continue;
+    }
+
+    if (bytes.byteLength > 5 * 1024 * 1024) {
+      return {
+        ok: false,
+        error: `\`${spec.filename}\` exceeds Google's 5 MB image asset cap (${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB). Re-export smaller.`,
+      };
+    }
+
+    const mime = spec.filename.endsWith(".png")
+      ? "image/png"
+      : spec.filename.endsWith(".jpg") || spec.filename.endsWith(".jpeg")
+        ? "image/jpeg"
+        : "application/octet-stream";
+
+    const parentId = await persistGeneratedImage(
+      {
+        bytes,
+        mimeType: mime,
+        promptUsed: `Manual test asset: ${spec.filename}`,
+      },
+      {
+        userId: session.user.id,
+        accountId: accountIdToUse,
+        isLogo: spec.isLogo,
+        label: `Manual · ${spec.label}`,
+        auditSource: "manual-test-assets",
+      },
+    );
+    loaded.push(spec.filename);
+
+    switch (spec.slot) {
+      case "logoSquare":
+        ids.logoAssetId = parentId;
+        break;
+      case "logoLandscape":
+        ids.landscapeLogoAssetId = parentId;
+        break;
+      case "marketingLandscape":
+        ids.marketingImageAssetId = parentId;
+        break;
+      case "marketingSquare":
+        ids.squareMarketingImageAssetId = parentId;
+        break;
+      case "marketingPortrait":
+        ids.portraitMarketingImageAssetId = parentId;
+        break;
+    }
+  }
+
+  return { ok: true, ids, loaded, skipped };
 }
 
 // ===========================================================================
@@ -635,9 +743,11 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
       scope: "nationwide",
       cities: [],
     },
-    // Legacy field — kept populated as a fallback. The adapter prefers
-    // `searchAdGroups` when present, so this is just for backward
-    // compat. We use the first cluster's copy as the placeholder.
+    // Legacy field — kept populated as a fallback for SEARCH only. The
+    // adapter prefers `searchAdGroups` when present, so this is just
+    // backward compat. We use the first cluster's copy as the placeholder.
+    // For PMAX we leave it `undefined` — populating it with empty arrays
+    // would trigger SearchAdCopySchema's `.min(3)` validation.
     searchAdCopy: !isPmax && input.searchClusters?.[0]
       ? {
           headlines: input.searchClusters[0].headlines,
@@ -645,7 +755,7 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
           keywords: input.searchClusters[0].keywords,
           negativeKeywords: [],
         }
-      : { headlines: [], descriptions: [], keywords: [], negativeKeywords: [] },
+      : undefined,
     // Phase A5 — multi-ad-group SEARCH. When present, the adapter
     // creates one AdGroup per cluster.
     searchAdGroups:
@@ -660,9 +770,10 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
           }))
         : undefined,
     // Legacy single-asset-group `pmaxAdCopy` — kept populated as a
-    // fallback. The PMAX adapter prefers `pmaxAssetGroups` when present;
-    // we use the first cluster's copy as the placeholder here so the
-    // schema always validates.
+    // fallback for PMAX only. The adapter prefers `pmaxAssetGroups`
+    // when present; we use the first cluster's copy as the placeholder.
+    // For SEARCH we leave it `undefined` — populating with empty arrays
+    // would trigger PmaxAdCopySchema's `.min(3)` validation.
     pmaxAdCopy: isPmax && input.pmaxClusters?.[0]
       ? {
           headlines: input.pmaxClusters[0].headlines,
@@ -670,12 +781,7 @@ function buildWizardDraft(input: LaunchInput): CampaignDraft {
           descriptions: input.pmaxClusters[0].descriptions,
           businessName: input.pmaxClusters[0].businessName,
         }
-      : {
-          headlines: [],
-          longHeadlines: [],
-          descriptions: [],
-          businessName: "",
-        },
+      : undefined,
     // Phase A5 — multi-asset-group PMAX. When present, the adapter
     // creates one AssetGroup per cluster.
     pmaxAssetGroups:

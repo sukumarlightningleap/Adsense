@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  FlaskConical,
   HelpCircle,
   ImageIcon,
   MessageCircle,
@@ -61,6 +62,7 @@ import {
   generateImagesAction,
   launchCampaignFromCreate,
   listConversionActionsForAccount,
+  loadManualTestAssets,
   planAndGenerateCopy,
   regenerateCopy,
   type BiddingStrategyInput,
@@ -69,6 +71,14 @@ import {
   type LaunchableAccount,
   type PlanAndGenerateResult,
 } from "./actions";
+import {
+  MANUAL_ASSET_FILES,
+  MANUAL_DEFAULT_BUDGET_USD,
+  MANUAL_LANDING_URL,
+  MANUAL_PMAX_CLUSTER,
+  MANUAL_PRODUCT_DESCRIPTION,
+  manualBrandNameWithSuffix,
+} from "./manual-mode";
 
 // ---------------------------------------------------------------------------
 // B3 — Conversion tracking on Create-form is now a PICKER over the
@@ -181,6 +191,15 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
   const [productDescription, setProductDescription] = useState("");
   const [landingPageUrl, setLandingPageUrl] = useState("");
   const [channel, setChannel] = useState<Channel>("SEARCH");
+
+  // -------- Manual mode (test-only) -------------------------------------
+  // Bypasses Gemini entirely so we can verify the Google Ads launch
+  // pipeline end-to-end (PMax especially) without burning AI quota.
+  // When ON: brand/description/URL get pre-filled with mock bookstore
+  // copy, the channel locks to PMAX, AI generation buttons are hidden,
+  // and the launch flow ingests hand-cropped images from
+  // public/manual-test-assets/ (see README.md in that folder).
+  const [manualMode, setManualMode] = useState(false);
 
   // -------- Generation state --------------------------------------------
   const [pending, startTransition] = useTransition();
@@ -321,6 +340,47 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
     dailyBudgetUsd >= 1 &&
     !launching;
 
+  // Manual mode toggle — pre-fill fields, lock channel to PMAX, and
+  // synthesize a draft locally so the user can skip straight to launch.
+  function applyManualMode(on: boolean) {
+    setManualMode(on);
+    if (on) {
+      // Fresh HH:mm:ss suffix per toggle so retried launches never
+      // collide on Google's "campaign name already exists" constraint.
+      const brand = manualBrandNameWithSuffix();
+      setBrandName(brand);
+      setProductDescription(MANUAL_PRODUCT_DESCRIPTION);
+      setLandingPageUrl(MANUAL_LANDING_URL);
+      setChannel("PMAX");
+      setDailyBudgetUsd(MANUAL_DEFAULT_BUDGET_USD);
+      setPlan({
+        sector: "Bookstore (manual test)",
+        packId: "manual",
+        packLabel: "Manual mock",
+        packMode: "manual",
+        masterPrompt: "(skipped — manual mode)",
+      });
+      setDraft(
+        buildDraftFromCopy(
+          { channel: "PMAX", clusters: [MANUAL_PMAX_CLUSTER] },
+          brand,
+        ),
+      );
+      setImageIds(null);
+      setImageError(null);
+      setError(null);
+    } else {
+      // Clear the synthetic state so the form looks pristine again.
+      setBrandName("");
+      setProductDescription("");
+      setLandingPageUrl("");
+      setDailyBudgetUsd(10);
+      setPlan(null);
+      setDraft(null);
+      setImageIds(null);
+    }
+  }
+
   function briefPayload(): CreateBrief {
     return {
       brandName,
@@ -406,6 +466,19 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
     if (!draft || !canLaunch) return;
     setLaunchError(null);
     startLaunch(async () => {
+      // Manual mode: ingest hand-cropped images from
+      // public/manual-test-assets/ on the fly and use those IDs.
+      // Skipped if the user already loaded them via "Load test images".
+      let effectiveImageIds = imageIds;
+      if (manualMode && !effectiveImageIds) {
+        const load = await loadManualTestAssets(accountId || undefined);
+        if (!load.ok) {
+          setLaunchError(load.error);
+          return;
+        }
+        effectiveImageIds = load.ids;
+        setImageIds(load.ids);
+      }
       const res = await launchCampaignFromCreate({
         brief: briefPayload(),
         channel,
@@ -462,7 +535,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
                     c.descriptions.length >= 2 &&
                     c.businessName.length >= 1,
                 ),
-              assetIds: imageIds ?? undefined,
+              assetIds: effectiveImageIds ?? undefined,
             }),
         // B3: the picked primary conversion action (server validates the
         // FK belongs to the account). NULL is allowed only when the
@@ -530,12 +603,22 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
           <Label className="text-[13px] font-medium">
             Brand name <span className="text-destructive">*</span>
           </Label>
-          <ChannelToggle
-            value={channel}
-            onChange={setChannel}
-            disabled={pending}
-          />
+          <div className="flex items-center gap-2">
+            <ManualModeToggle
+              value={manualMode}
+              onChange={applyManualMode}
+              disabled={pending || launching}
+            />
+            <ChannelToggle
+              value={channel}
+              onChange={setChannel}
+              disabled={pending || manualMode}
+            />
+          </div>
         </div>
+        {manualMode && (
+          <ManualModeHelp />
+        )}
         <Input
           value={brandName}
           onChange={(e) => setBrandName(e.target.value)}
@@ -569,22 +652,26 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canGenerate}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-foreground px-5 text-[13.5px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Wand2 className="size-4" />
-          {pending
-            ? "Generating…"
-            : draft
-              ? "Re-plan (replaces all unedited fields)"
-              : "Generate campaign"}
-        </button>
-        {pending && (
-          <p className="text-center text-[11.5px] text-muted-foreground">
-            Picking style pack + writing copy. ~5 seconds.
-          </p>
+        {!manualMode && (
+          <>
+            <button
+              type="submit"
+              disabled={!canGenerate}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-foreground px-5 text-[13.5px] font-medium text-background transition-colors hover:bg-foreground/85 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Wand2 className="size-4" />
+              {pending
+                ? "Generating…"
+                : draft
+                  ? "Re-plan (replaces all unedited fields)"
+                  : "Generate campaign"}
+            </button>
+            {pending && (
+              <p className="text-center text-[11.5px] text-muted-foreground">
+                Picking style pack + writing copy. ~5 seconds.
+              </p>
+            )}
+          </>
         )}
       </form>
 
@@ -607,27 +694,31 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onRegenerate}
-              disabled={regenPending || pending}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[12px] font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-              title="Re-roll copy. Manually-edited fields are preserved."
-            >
-              <RefreshCw
-                className={cn("size-3.5", regenPending && "animate-spin")}
-              />
-              {regenPending ? "Refreshing…" : "Regenerate copy"}
-            </button>
+            {!manualMode && (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                disabled={regenPending || pending}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[12px] font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                title="Re-roll copy. Manually-edited fields are preserved."
+              >
+                <RefreshCw
+                  className={cn("size-3.5", regenPending && "animate-spin")}
+                />
+                {regenPending ? "Refreshing…" : "Regenerate copy"}
+              </button>
+            )}
           </div>
 
-          {/* A10 — Refinement chat */}
-          <RefinementChat
-            value={refinement}
-            onChange={setRefinement}
-            onSubmit={onRefine}
-            pending={refining}
-          />
+          {/* A10 — Refinement chat (Gemini-powered; skip in manual mode) */}
+          {!manualMode && (
+            <RefinementChat
+              value={refinement}
+              onChange={setRefinement}
+              onSubmit={onRefine}
+              pending={refining}
+            />
+          )}
 
           {/* SEARCH path — Phase A5 multi-ad-group: render one card per
               cluster. Each card edits its own headlines / descriptions /
@@ -780,16 +871,39 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
             </>
           )}
 
-          {/* Images panel — optional but recommended for PMAX */}
-          <ImagesPanel
-            channel={draft.channel}
-            mode={imageMode}
-            onModeChange={setImageMode}
-            ids={imageIds}
-            pending={imagePending}
-            error={imageError}
-            onGenerate={onGenerateImages}
-          />
+          {/* Images panel — AI generation (hidden in manual mode; we
+              ingest from public/manual-test-assets/ at launch, but we
+              offer a "Load now" button for previewing first). */}
+          {manualMode ? (
+            <ManualAssetsPanel
+              ids={imageIds}
+              pending={imagePending}
+              error={imageError}
+              onLoad={() => {
+                setImageError(null);
+                startImageGen(async () => {
+                  const res = await loadManualTestAssets(
+                    accountId || undefined,
+                  );
+                  if (!res.ok) {
+                    setImageError(res.error);
+                    return;
+                  }
+                  setImageIds(res.ids);
+                });
+              }}
+            />
+          ) : (
+            <ImagesPanel
+              channel={draft.channel}
+              mode={imageMode}
+              onModeChange={setImageMode}
+              ids={imageIds}
+              pending={imagePending}
+              error={imageError}
+              onGenerate={onGenerateImages}
+            />
+          )}
 
           {/* Bucket 2 — INFERRED */}
           <Bucket2
@@ -847,6 +961,7 @@ export function CreateForm({ accounts }: { accounts: LaunchableAccount[] }) {
             country={country}
             dailyBudgetUsd={dailyBudgetUsd}
             hasImages={!!imageIds}
+            manualMode={manualMode}
             canLaunch={canLaunch}
             launching={launching}
             launchError={launchError}
@@ -935,6 +1050,141 @@ function ChannelToggle({
         </button>
       ))}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Manual mode toggle + helpers — test-only. Bypasses Gemini so we can
+// verify the Google Ads launch pipeline end-to-end without burning AI
+// quota.
+// ---------------------------------------------------------------------------
+
+function ManualModeToggle({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      disabled={disabled}
+      onClick={() => onChange(!value)}
+      title="Skip AI — pre-fill mock data and use images from public/manual-test-assets/"
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+        value
+          ? "border-amber-400/60 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+          : "border-border bg-background text-muted-foreground hover:bg-muted",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
+      <FlaskConical className="size-3" />
+      {value ? "Manual mode ON" : "Manual mode"}
+    </button>
+  );
+}
+
+function ManualModeHelp() {
+  return (
+    <div className="rounded-md border border-amber-400/40 bg-amber-50/60 px-3 py-2.5 text-[12px] leading-5 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-200">
+      <div className="font-semibold">Manual test mode</div>
+      <p className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
+        Skipping AI. Channel locked to PMAX. Mock bookstore brief loaded.
+        Edit any field below. Make sure you&apos;ve dropped image files in{" "}
+        <code className="rounded bg-amber-100/70 px-1 font-mono text-[11px] dark:bg-amber-500/15">
+          public/manual-test-assets/
+        </code>{" "}
+        — see README.md in that folder for filenames + ratios. Files are
+        ingested when you click Launch.
+      </p>
+    </div>
+  );
+}
+
+function ManualAssetsPanel({
+  ids,
+  pending,
+  error,
+  onLoad,
+}: {
+  ids: GeneratedAssetIds | null;
+  pending: boolean;
+  error: string | null;
+  onLoad: () => void;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid size-8 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          <ImageIcon className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] font-semibold">
+            Manual test images
+          </div>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            We read these files from{" "}
+            <code className="rounded bg-muted px-1 font-mono text-[11px]">
+              public/manual-test-assets/
+            </code>
+            . Loading happens automatically on Launch; click below to load
+            now if you want to preview first.
+          </p>
+        </div>
+        {ids && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <CheckCircle2 className="size-3" />
+            Loaded
+          </span>
+        )}
+      </div>
+
+      <ul className="mt-4 grid gap-1.5 text-[11.5px]">
+        {MANUAL_ASSET_FILES.map((f) => (
+          <li
+            key={f.filename}
+            className="flex items-center justify-between gap-3 rounded border border-border bg-background px-2.5 py-1.5"
+          >
+            <code className="font-mono text-[11px]">{f.filename}</code>
+            <span className="shrink-0 text-muted-foreground">
+              {f.ratio} · {f.recommendedSize}
+              {!f.required && " · optional"}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-[11px] text-muted-foreground">
+          {ids
+            ? "Ingested as Asset rows. You're good to launch."
+            : "Files stay on disk until ingested."}
+        </p>
+        <button
+          type="button"
+          onClick={onLoad}
+          disabled={pending}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[12px] font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw
+            className={cn("size-3.5", pending && "animate-spin")}
+          />
+          {pending ? "Loading…" : ids ? "Reload" : "Load test images now"}
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11.5px] text-destructive">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -1591,6 +1841,7 @@ function ReviewAndLaunch({
   country,
   dailyBudgetUsd,
   hasImages,
+  manualMode,
   canLaunch,
   launching,
   launchError,
@@ -1602,12 +1853,17 @@ function ReviewAndLaunch({
   country: CountryCode;
   dailyBudgetUsd: number;
   hasImages: boolean;
+  manualMode: boolean;
   canLaunch: boolean;
   launching: boolean;
   launchError: string | null;
   onLaunch: () => void;
 }) {
-  const needsImagesForPmax = channel === "PMAX" && !hasImages;
+  // In manual mode the launch flow ingests images from
+  // public/manual-test-assets/ on click, so we don't need to block on
+  // hasImages here — the server action validates the files exist and
+  // returns a clean error if any required one is missing.
+  const needsImagesForPmax = channel === "PMAX" && !hasImages && !manualMode;
 
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -1628,7 +1884,13 @@ function ReviewAndLaunch({
         <ReviewRow label="Account" value={accountLabel} />
         <ReviewRow
           label="Images"
-          value={hasImages ? "Generated" : "Not generated"}
+          value={
+            hasImages
+              ? "Loaded"
+              : manualMode
+                ? "From manual-test-assets/ (on launch)"
+                : "Not generated"
+          }
           warn={needsImagesForPmax}
         />
       </dl>

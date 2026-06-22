@@ -19,7 +19,7 @@
 import type { LaunchPayload } from "@/lib/wizard/payload-builder";
 
 import { activeProfile } from "./auth";
-import { buildCustomer } from "./client";
+import { buildCustomerForAccount } from "./client";
 import { launchSearchCampaign, type LaunchResult } from "./adapter";
 import { launchPmaxCampaign } from "./adapter-pmax";
 
@@ -65,11 +65,21 @@ export function launcherMaxDailyUsd(): number {
  * Preflight: run every safety check WITHOUT touching the SDK. Returns
  * either an error or the fully-validated launch context.
  */
+/**
+ * Per-account credential carrier. `buildCustomerForAccount` decrypts the
+ * oauthRefreshToken at SDK-mint time, so we pass it through verbatim.
+ */
+export type LaunchAccount = {
+  customerId: string;
+  loginCustomerId: string | null;
+  mccCustomerId: string | null;
+  oauthRefreshToken: string | null;
+};
+
 export type LaunchContext = {
   campaignId: string;
   payload: LaunchPayload;
-  customerId: string;
-  loginCustomerId: string | undefined;
+  account: LaunchAccount;
 };
 
 export function preflight(args: {
@@ -81,11 +91,7 @@ export function preflight(args: {
     dailyBudgetMicros: bigint | null;
     payloadJson: unknown;
   };
-  account: {
-    customerId: string;
-    loginCustomerId: string | null;
-    demoMode: boolean;
-  };
+  account: LaunchAccount & { demoMode: boolean };
 }): { ok: false; error: LauncherError } | { ok: true; ctx: LaunchContext } {
   const { campaign, account } = args;
 
@@ -156,12 +162,16 @@ export function preflight(args: {
     };
   }
 
-  // Confirm env-level creds are present BEFORE making any SDK call so the
-  // operator sees a clean error, not a gRPC explosion.
+  // Confirm credentials resolve BEFORE making any SDK call so the
+  // operator sees a clean error, not a gRPC explosion. Uses the same
+  // per-account credential resolver the live SDK call below uses, so a
+  // missing/expired token surfaces here rather than mid-flight.
   try {
-    void buildCustomer({
+    void buildCustomerForAccount({
       customerId: account.customerId,
-      loginCustomerId: account.loginCustomerId ?? undefined,
+      loginCustomerId: account.loginCustomerId,
+      mccCustomerId: account.mccCustomerId,
+      oauthRefreshToken: account.oauthRefreshToken,
     });
   } catch (e) {
     return {
@@ -217,8 +227,12 @@ export function preflight(args: {
     ctx: {
       campaignId: campaign.id,
       payload,
-      customerId: account.customerId,
-      loginCustomerId: account.loginCustomerId ?? undefined,
+      account: {
+        customerId: account.customerId,
+        loginCustomerId: account.loginCustomerId,
+        mccCustomerId: account.mccCustomerId,
+        oauthRefreshToken: account.oauthRefreshToken,
+      },
     },
   };
 }
@@ -231,13 +245,10 @@ export async function executeLaunch(
   ctx: LaunchContext,
 ): Promise<LauncherOutcome> {
   try {
-    const customer = buildCustomer({
-      customerId: ctx.customerId,
-      loginCustomerId: ctx.loginCustomerId,
-    });
+    const customer = buildCustomerForAccount(ctx.account);
     // No-dashes form of the customer ID — used inside PMAX for the
     // `customers/{id}/assetGroups/-1` temp resource name.
-    const customerIdClean = ctx.customerId.replace(/-/g, "").trim();
+    const customerIdClean = ctx.account.customerId.replace(/-/g, "").trim();
 
     let result;
     if (ctx.payload.channel === "PMAX") {
@@ -264,22 +275,60 @@ export async function executeLaunch(
 }
 
 /**
- * Google Ads errors from the Opteo SDK come back as a structured
- * `GoogleAdsFailure` with field-level reasons. Pull the most useful
- * piece for surface display; full payload is in the audit log.
+ * Google Ads errors from the Opteo SDK come back in several shapes:
+ *   - Error subclass with `.errors[]` (GoogleAdsFailure proto)
+ *   - Plain object (not Error) with `.errors[]` — happens when the SDK
+ *     wraps a partial-failure response or a non-Status RPC error
+ *   - Wrapped error with `.cause`, `.details`, `.metadata` from gRPC
+ * We walk every shape so the operator gets readable text instead of
+ * "[object Object]".
  */
 function extractSdkError(e: unknown): string {
-  if (e instanceof Error) {
-    // Opteo's `GoogleAdsFailure` exposes `.errors[]` with `.message`.
-    const errs = (e as unknown as { errors?: Array<{ message?: string }> })
-      .errors;
-    if (Array.isArray(errs) && errs.length > 0) {
-      return errs
-        .map((er) => er.message)
-        .filter(Boolean)
-        .join("; ");
-    }
-    return e.message;
+  // Log the raw error for debugging — server logs only, never to client.
+  // The dev terminal will show this; in prod it lands in Vercel logs.
+  console.error("[launcher] SDK_FAILED raw error:", e);
+
+  // String / number / null — just stringify.
+  if (e == null || typeof e !== "object") return String(e);
+
+  // Walk `.errors[]` regardless of whether it's an Error instance or
+  // plain object. The Opteo SDK throws plain `{errors: [...]}` shapes in
+  // some paths.
+  const obj = e as Record<string, unknown>;
+  const errs = obj.errors;
+  if (Array.isArray(errs) && errs.length > 0) {
+    const messages = errs
+      .map((er) => {
+        if (typeof er === "string") return er;
+        if (er && typeof er === "object") {
+          const m = (er as { message?: unknown }).message;
+          if (typeof m === "string") return m;
+          try {
+            return JSON.stringify(er);
+          } catch {
+            return "[unserializable]";
+          }
+        }
+        return String(er);
+      })
+      .filter(Boolean);
+    if (messages.length > 0) return messages.join("; ");
   }
-  return String(e);
+
+  // Error instance with a message — return it.
+  if (e instanceof Error && e.message) return e.message;
+
+  // gRPC errors often have `.details` or `.message` on plain objects.
+  if (typeof obj.message === "string") return obj.message;
+  if (typeof obj.details === "string") return obj.details;
+  if (typeof obj.code === "string" || typeof obj.code === "number") {
+    return `gRPC code ${obj.code}: ${JSON.stringify(obj).slice(0, 300)}`;
+  }
+
+  // Last resort: dump the object so at least the operator sees the shape.
+  try {
+    return JSON.stringify(obj).slice(0, 500);
+  } catch {
+    return "[unserializable error object]";
+  }
 }
