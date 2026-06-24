@@ -134,3 +134,29 @@ export async function resizeForGoogleAds(
   }
   return results;
 }
+
+/**
+ * Resize ONE source image to a single Google Ads role's exact dimensions.
+ * Used by the per-slot upload flow on /app/create — when a user uploads
+ * an image for a specific slot, we only need that one variant (not the
+ * full 2-or-3 set `resizeForGoogleAds` produces).
+ */
+export async function resizeForRole(
+  src: Buffer,
+  role: AssetRole,
+): Promise<ResizedVariant> {
+  const size = GOOGLE_ADS_SIZES.find((s) => s.role === role);
+  if (!size) throw new Error(`Unknown AssetRole: ${role}`);
+  const buf = await sharp(src)
+    .resize(size.width, size.height, {
+      fit: "cover",
+      position: "center",
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  return {
+    size,
+    bytes: buf,
+    sha256: createHash("sha256").update(buf).digest("hex"),
+  };
+}

@@ -63,18 +63,34 @@ export type StylePackLibrary = {
 };
 
 // ---------------------------------------------------------------------------
-// Library loader
+// Library loader — prefers vision-enriched JSON over the hand-curated seed
+// when the script has been run (scripts/ingest-reference-ads.mjs).
 // ---------------------------------------------------------------------------
 
 import seedJson from "./style-packs.seed.json";
 
+// Optional vision-enriched library. Webpack/Turbopack will fail the import
+// if the file doesn't exist, so we try-catch and silently fall back.
+let visionLib: StylePackLibrary | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const visionJson = require("./style-packs.json") as StylePackLibrary;
+  if (visionJson?.packs?.length) visionLib = visionJson;
+} catch {
+  // No vision-enriched file yet — that's fine, we use the seed.
+}
+
 let cachedSeed: StylePackLibrary | null = null;
 
 /**
- * Hand-curated style packs distilled from /reference_ads/MANIFEST.md.
- * Available immediately, before any Gemini Vision ingestion runs.
+ * The style-pack library the architect picks from. Order of preference:
+ *   1. `style-packs.json` — vision-enriched output of
+ *      `scripts/ingest-reference-ads.mjs` (run on demand, ~$0.40/run).
+ *   2. `style-packs.seed.json` — hand-curated fallback distilled from
+ *      `reference_ads/MANIFEST.md`. Always available.
  */
 export function loadSeedLibrary(): StylePackLibrary {
+  if (visionLib) return visionLib;
   if (!cachedSeed) {
     cachedSeed = seedJson as StylePackLibrary;
   }

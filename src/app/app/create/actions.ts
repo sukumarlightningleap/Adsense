@@ -29,13 +29,18 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import type { AssetRole } from "@/lib/ads/types";
 import { planCampaign, type CampaignPlan } from "@/lib/ai/architect";
-import { persistGeneratedImage } from "@/lib/ai/asset-persistence";
+import {
+  persistGeneratedImage,
+  persistUploadedImageForRole,
+} from "@/lib/ai/asset-persistence";
 import {
   generateClusteredPmaxCopy,
   generateClusteredSearchCopy,
 } from "@/lib/ai/copy-generator";
 import { GeminiKeyError } from "@/lib/ai/gemini-client";
+import { renderImage } from "@/lib/ai/image-generator";
 import {
   generateAssetsForBrief,
   type GeneratedAssetIds,
@@ -402,6 +407,168 @@ export async function loadManualTestAssets(
   }
 
   return { ok: true, ids, loaded, skipped };
+}
+
+// ===========================================================================
+// Per-slot logo generation (explicit user action). Fast mode no longer
+// auto-generates a logo — most customers already have one and would
+// prefer to upload theirs. This action exists as a fallback: a single
+// Gemini call (~$0.04) using the architect's logo prompt. Returns BOTH
+// the square_logo and landscape_logo IDs (same parent, sharp-cropped
+// into both variants).
+// ===========================================================================
+
+export type GenerateLogoOnlyResult =
+  | { ok: true; logoAssetId: string; landscapeLogoAssetId: string }
+  | { ok: false; error: string };
+
+export async function generateLogoOnlyAction(
+  input: CreateBrief,
+  accountId?: string,
+): Promise<GenerateLogoOnlyResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Sign-in required." };
+  if (session.user.role === "demo") {
+    return { ok: false, error: "Demo users can't generate logos." };
+  }
+
+  const brandName = input.brandName.trim();
+  if (!brandName) {
+    return { ok: false, error: "Brand name is required to generate a logo." };
+  }
+
+  let accountIdToUse: string | null = null;
+  if (accountId) {
+    const account = await db.adsAccount.findFirst({
+      where: { id: accountId, userId: session.user.id, demoMode: false },
+      select: { id: true },
+    });
+    accountIdToUse = account?.id ?? null;
+  }
+
+  const brief: AdBrief = {
+    brandName,
+    productDescription: input.productDescription,
+    landingPageUrl: input.landingPageUrl?.trim() ?? "",
+    channel: input.channel ?? "PMAX",
+  };
+
+  try {
+    const plan: CampaignPlan = await planCampaign(brief);
+    const logoImg = await renderImage(plan.prompts.logo);
+    const logoParentId = await persistGeneratedImage(logoImg, {
+      userId: session.user.id,
+      accountId: accountIdToUse,
+      isLogo: true,
+      label: `AI · ${brandName} · logo (on-demand)`,
+      auditSource: "logo-only:on-demand",
+    });
+    return {
+      ok: true,
+      logoAssetId: logoParentId,
+      landscapeLogoAssetId: logoParentId,
+    };
+  } catch (e) {
+    if (e instanceof GeminiKeyError) {
+      return { ok: false, error: e.message };
+    }
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Logo generation failed.",
+    };
+  }
+}
+
+// ===========================================================================
+// Per-slot user upload. Accepts a FormData with `file`, `role`, and
+// optional `accountId`. The client has already validated mime + size +
+// aspect-ratio in the browser; we re-validate here as a safety net
+// (never trust a client). Returns the new Asset ID so the caller can
+// update the right per-role state slot.
+// ===========================================================================
+
+export type UploadAssetResult =
+  | { ok: true; assetId: string; role: AssetRole }
+  | { ok: false; error: string };
+
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB — Google Ads hard cap
+const ALLOWED_UPLOAD_MIMES = new Set(["image/png", "image/jpeg"]);
+const ALLOWED_UPLOAD_ROLES = new Set<AssetRole>([
+  "marketing_image",
+  "square_marketing_image",
+  "portrait_marketing_image",
+  "square_logo",
+  "landscape_logo",
+]);
+
+export async function uploadAssetForRoleAction(
+  formData: FormData,
+): Promise<UploadAssetResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Sign-in required." };
+  if (session.user.role === "demo") {
+    return { ok: false, error: "Demo users can't upload assets." };
+  }
+
+  const file = formData.get("file");
+  const role = String(formData.get("role") ?? "") as AssetRole;
+  const accountIdParam = formData.get("accountId");
+  const labelParam = String(formData.get("label") ?? "").trim() || "Uploaded";
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "No file received." };
+  }
+  if (!ALLOWED_UPLOAD_ROLES.has(role)) {
+    return { ok: false, error: `Unknown image role: ${String(role)}` };
+  }
+  if (!ALLOWED_UPLOAD_MIMES.has(file.type)) {
+    return {
+      ok: false,
+      error: `Only PNG and JPG accepted (got ${file.type || "unknown"}).`,
+    };
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return {
+      ok: false,
+      error: `File too large — max 5 MB, got ${(file.size / 1024 / 1024).toFixed(2)} MB.`,
+    };
+  }
+
+  let accountIdToUse: string | null = null;
+  if (typeof accountIdParam === "string" && accountIdParam.length > 0) {
+    const account = await db.adsAccount.findFirst({
+      where: {
+        id: accountIdParam,
+        userId: session.user.id,
+        demoMode: false,
+      },
+      select: { id: true },
+    });
+    accountIdToUse = account?.id ?? null;
+  }
+
+  try {
+    const arrayBuf = await file.arrayBuffer();
+    const bytes = Buffer.from(new Uint8Array(arrayBuf));
+    const assetId = await persistUploadedImageForRole(
+      { bytes, mime: file.type },
+      {
+        userId: session.user.id,
+        accountId: accountIdToUse,
+        role,
+        label: `Uploaded · ${labelParam} · ${role.replace(/_/g, " ")}`,
+      },
+    );
+    return { ok: true, assetId, role };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Upload failed — please try a different image.",
+    };
+  }
 }
 
 // ===========================================================================

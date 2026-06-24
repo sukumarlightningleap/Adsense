@@ -1,18 +1,40 @@
 /**
- * Minimal HTTP wrapper around the Gemini REST API.
+ * Minimal HTTP wrapper around Google's Gemini API.
+ *
+ * Supports BOTH key formats — auto-detected by prefix:
+ *
+ *   - "AIza…" → AI Studio key → `generativelanguage.googleapis.com/v1beta`
+ *   - "AQ.…"  → Agent Platform / Vertex AI express-mode key →
+ *               `aiplatform.googleapis.com/v1/publishers/google`
+ *
+ * Both endpoints accept the same JSON body shape we send (role: "user" +
+ * generationConfig). The only difference is the URL.
+ *
+ * Auth precedence: GOOGLE_AGENT_PLATFORM_KEY (preferred) > GEMINI_API_KEY.
+ * Throws `GeminiKeyError` if missing or blocked so callers can surface a
+ * clean message in the UI rather than a 500.
  *
  * We don't pull the `@google/generative-ai` SDK — keeps the dep tree small
- * and gives us full control over JSON-mode and image-mode requests.
- *
- * Auth: GEMINI_API_KEY from env. Throws `GeminiKeyError` if missing or
- * blocked so callers can surface a clean message in the UI rather than a
- * 500.
+ * and gives us full control over JSON-mode and image-mode requests, and
+ * the SDK doesn't speak the AQ. key's endpoint anyway.
  */
 
 const DEFAULT_TEXT_MODEL = "gemini-2.5-flash";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
-const ENDPOINT = (model: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+const AI_STUDIO_HOST = "https://generativelanguage.googleapis.com/v1beta";
+const AGENT_PLATFORM_HOST =
+  "https://aiplatform.googleapis.com/v1/publishers/google";
+
+function endpointForKey(model: string, key: string): string {
+  // AQ.-prefixed keys are Agent Platform / Vertex AI express-mode and
+  // MUST hit aiplatform.googleapis.com. AIza-prefixed are AI Studio and
+  // hit generativelanguage.googleapis.com.
+  if (key.startsWith("AQ.")) {
+    return `${AGENT_PLATFORM_HOST}/models/${model}:generateContent`;
+  }
+  return `${AI_STUDIO_HOST}/models/${model}:generateContent`;
+}
 
 export class GeminiKeyError extends Error {
   constructor(message: string) {
@@ -31,10 +53,14 @@ export class GeminiCallError extends Error {
 }
 
 function readKey(): string {
-  const key = process.env.GEMINI_API_KEY?.trim();
+  // Prefer the Agent Platform key when present (AQ.* — Vertex AI express).
+  // Fall back to GEMINI_API_KEY (AIza* — AI Studio) for back-compat.
+  const key =
+    process.env.GOOGLE_AGENT_PLATFORM_KEY?.trim() ||
+    process.env.GEMINI_API_KEY?.trim();
   if (!key) {
     throw new GeminiKeyError(
-      "GEMINI_API_KEY is not set. Add it to .env to enable AI generation.",
+      "No Gemini key configured. Set GOOGLE_AGENT_PLATFORM_KEY (AQ.* — Vertex AI express) or GEMINI_API_KEY (AIza* — AI Studio) in .env.",
     );
   }
   return key;
@@ -103,7 +129,7 @@ export async function generateText<T = string>(
     },
   };
 
-  const res = await fetch(`${ENDPOINT(model)}?key=${encodeURIComponent(key)}`, {
+  const res = await fetch(`${endpointForKey(model, key)}?key=${encodeURIComponent(key)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -112,8 +138,11 @@ export async function generateText<T = string>(
   if (!res.ok) {
     const errText = await res.text();
     if (res.status === 403 || /API_KEY/.test(errText)) {
+      const isAgentPlatform = key.startsWith("AQ.");
       throw new GeminiKeyError(
-        `Gemini rejected the API key (HTTP ${res.status}). Check GCP API restrictions on the key.`,
+        isAgentPlatform
+          ? `Vertex AI Agent Platform rejected the key (HTTP ${res.status}). Common causes: (1) the Agent Platform API is not enabled on the key's GCP project — enable at console.cloud.google.com/apis/library/aiplatform.googleapis.com; (2) billing is not attached to that project; (3) the key is restricted to a different API. Raw: ${errText.slice(0, 250)}`
+          : `Gemini AI Studio rejected the key (HTTP ${res.status}). Check GCP API restrictions on the key. Raw: ${errText.slice(0, 250)}`,
       );
     }
     throw new GeminiCallError(
@@ -192,7 +221,7 @@ export async function generateImage(opts: GenerateImageOpts): Promise<{
     },
   };
 
-  const res = await fetch(`${ENDPOINT(model)}?key=${encodeURIComponent(key)}`, {
+  const res = await fetch(`${endpointForKey(model, key)}?key=${encodeURIComponent(key)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -201,8 +230,11 @@ export async function generateImage(opts: GenerateImageOpts): Promise<{
   if (!res.ok) {
     const errText = await res.text();
     if (res.status === 403 || /API_KEY/.test(errText)) {
+      const isAgentPlatform = key.startsWith("AQ.");
       throw new GeminiKeyError(
-        `Gemini rejected the API key (HTTP ${res.status}). Check GCP API restrictions on the key.`,
+        isAgentPlatform
+          ? `Vertex AI Agent Platform rejected the key (HTTP ${res.status}). Common causes: (1) the Agent Platform API is not enabled on the key's GCP project — enable at console.cloud.google.com/apis/library/aiplatform.googleapis.com; (2) billing is not attached to that project; (3) the key is restricted to a different API. Raw: ${errText.slice(0, 250)}`
+          : `Gemini AI Studio rejected the key (HTTP ${res.status}). Check GCP API restrictions on the key. Raw: ${errText.slice(0, 250)}`,
       );
     }
     throw new GeminiCallError(

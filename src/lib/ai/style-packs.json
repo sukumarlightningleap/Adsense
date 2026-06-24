@@ -1,0 +1,1149 @@
+{
+  "generatedAt": "2026-06-24T00:00:00.000Z",
+  "source": "vision-ingest",
+  "packs": [
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-split-screen-layout",
+      "label": "Publishing · Designed-creative · Penguin RH Audio",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#8040C0",
+        "secondary": "#D0B0E0",
+        "accent": "#FF8040"
+      },
+      "composition": "The composition features a large smiling woman with headphones on the left, balanced by a grid of six book covers on the right, with prominent text at the top and bottom creating a clear visual hierarchy.",
+      "mood": [
+        "Joyful",
+        "Engaging",
+        "Nostalgic",
+        "Vibrant",
+        "Inviting"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a split-screen layout, contrasting a large photographic portrait with a grid of product images, unified by a vibrant color palette and prominent display typography.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 35,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-23-06.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-clean-grid-layout-t",
+      "label": "Publishing · Designed-creative · Penguin RH Audio",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#E0CFF7",
+        "secondary": "#8A4FAD",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Six book covers are arranged in a prominent 2x3 grid, centrally positioned with generous negative space above and below for a headline and call to action, establishing a clear top-to-bottom focal hierarchy.",
+      "mood": [
+        "Literary",
+        "Engaging",
+        "Organized",
+        "Historical",
+        "Inviting"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a clean grid layout to showcase multiple product covers, framed by a prominent headline and a clear call to action, all unified by a consistent color palette.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 11,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-23-14.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-clear-grid-layout-t",
+      "label": "Publishing · Designed-creative · Penguin RH Audio",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#D8BDEE",
+        "secondary": "#FFFFFF",
+        "accent": "#8A3E9E"
+      },
+      "composition": "The composition features a prominent large headline at the top, a central grid of six book covers, and a smaller call-to-action and brand information at the bottom, all framed by a generous light purple background.",
+      "mood": [
+        "Historical",
+        "Literary",
+        "Engaging",
+        "Nostalgic"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a clear grid layout to present multiple book covers, framed by large, stylized text at the top and informative text at the bottom, all set against a solid color background.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 12,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-23-22.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-large-organic-shape",
+      "label": "Publishing · Designed-creative · Penguin RH Audio",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#A38B6E",
+        "secondary": "#F5F0E8",
+        "accent": "#2C2C2C"
+      },
+      "composition": "The composition features a large, off-white oval shape containing prominent text on the left and a grid of book covers on the right, providing clear visual separation and ample breathing room around the key elements.",
+      "mood": [
+        "educational",
+        "informative",
+        "engaging",
+        "classic",
+        "organized"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a large, organic-shaped overlay to create a distinct content block for the headline and product display, set against a subtly textured background.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 11,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-24-05.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-utilizes-a-large-light-colore",
+      "label": "Publishing · Designed-creative · Penguin RH",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#F5F0E6",
+        "secondary": "#222222",
+        "accent": "#C0392B"
+      },
+      "composition": "The composition features a central light-colored oval framing multiple book covers and prominent text, creating a clear focal point against a subtly textured background.",
+      "mood": [
+        "Informative",
+        "Historical",
+        "Engaging",
+        "Curated",
+        "Literary"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design utilizes a large, light-colored oval shape as a central framing device to highlight the main content, including text and book covers, against a darker, textured background.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 7,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-24-13.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-strong-graphic-illu",
+      "label": "Publishing · Designed-creative · Penguin RH (Avery)",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#222222",
+        "secondary": "#E03030",
+        "accent": "#F0EFE0"
+      },
+      "composition": "A stylized illustration of a woman in profile dominates the left and center, with a large, bold title positioned prominently on the right, creating a clear focal hierarchy on the text.",
+      "mood": [
+        "Mysterious",
+        "Intriguing",
+        "Bold",
+        "Suspenseful",
+        "Modern"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design employs a strong, graphic illustration combined with impactful, sans-serif typography and a symbolic target icon to create a compelling and suspenseful book cover.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 30,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-24-51.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-this-image-utilizes-a-flat-lay-product-p",
+      "label": "Publishing · Designed-creative · Penguin RH",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FF5733",
+        "secondary": "#00A0A0",
+        "accent": "#E74C3C"
+      },
+      "composition": "A single book is centrally placed on a vibrant, solid background, creating a clear focal point with ample negative space that emphasizes the product.",
+      "mood": [
+        "Vibrant",
+        "Clean",
+        "Direct",
+        "Modern"
+      ],
+      "photographicStyle": "photo",
+      "technique": "This image utilizes a flat lay product photography technique, featuring a single item against a bold, contrasting background to achieve visual impact and highlight the book.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 18,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-26-27.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-product-is-showcased-through-a-human",
+      "label": "Publishing · Designed-creative · Harper Voyager",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#E5734F",
+        "secondary": "#365C5C",
+        "accent": "#CDA434"
+      },
+      "composition": "A human hand gently holds a book, angled slightly off-center, creating a dynamic focal point against a warm, solid background.",
+      "mood": [
+        "engaging",
+        "literary",
+        "intriguing",
+        "warm",
+        "inviting"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The product is showcased through a human interaction, emphasizing its tangible presence and inviting engagement.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 21,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-27-14.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-a-flat-lay-technique-is-used-to-present-",
+      "label": "Publishing · Designed-creative · Emily Wilson Hussem",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#1E4D4A",
+        "secondary": "#F0F0F0",
+        "accent": "#E0C16E"
+      },
+      "composition": "The book is centrally placed on a textured white background, with a coffee cup held by a hand in the bottom right, creating a clear focal hierarchy on the book with ample breathing room.",
+      "mood": [
+        "Cozy",
+        "Calm",
+        "Intellectual",
+        "Relaxed",
+        "Inviting"
+      ],
+      "photographicStyle": "photo",
+      "technique": "A flat lay technique is used to present the book as a lifestyle product, surrounded by cozy elements.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 27,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-27-45.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-strategic-negative-sp",
+      "label": "Publishing · Designed-creative · Hachette",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#3A5C4A",
+        "secondary": "#4A4A4A",
+        "accent": "#E0E0E0"
+      },
+      "composition": "The composition features a stack of three Bibles positioned on the right side of the frame, leaving ample negative space on the left for prominent text, creating a balanced yet asymmetrical layout.",
+      "mood": [
+        "elegant",
+        "classic",
+        "refined",
+        "scholarly",
+        "serene"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The design employs strategic negative space on the left to emphasize the product title, contrasting with the detailed product shot on the right.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 6,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-28-44.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-image-employs-a-shallow-depth-of-fie",
+      "label": "Publishing · Designed-creative · Hachette",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#D4C7B5",
+        "secondary": "#8B6B50",
+        "accent": "#6B8E6B"
+      },
+      "composition": "An open Bible is centrally placed and angled, occupying most of the frame, with a shallow depth of field blurring the background to maintain focus on the book and its overlaid text.",
+      "mood": [
+        "Reverent",
+        "Traditional",
+        "Calm",
+        "Scholarly",
+        "Sacred"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The image employs a shallow depth of field to highlight the main subject, with a semi-transparent text overlay directly on the book for branding.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 6,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-28-48.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-text-is-strategically-overlaid-onto-a-pr",
+      "label": "Publishing · Designed-creative · Hachette",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#2E5C3D",
+        "secondary": "#5C3D2E",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Two ornate books are diagonally arranged, occupying most of the frame, with the illuminated bible prominently displayed in the upper right and overlaid text establishing a clear focal hierarchy.",
+      "mood": [
+        "Elegant",
+        "Historical",
+        "Artistic",
+        "Rich",
+        "Sophisticated"
+      ],
+      "photographicStyle": "photo",
+      "technique": "Text is strategically overlaid onto a product photograph, integrating branding and key information directly into the visual presentation.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 9,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-28-52.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-minimalist-illustra",
+      "label": "Publishing · Designed-creative · Audible",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#F8F5EE",
+        "secondary": "#E87B3D",
+        "accent": "#E06B3A"
+      },
+      "composition": "The composition features two robins perched on fence posts at the bottom, with significant negative space above them, drawing the eye first to the large title text and then to the birds.",
+      "mood": [
+        "gentle",
+        "natural",
+        "calm",
+        "literary",
+        "charming"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design employs a minimalist illustration style with a warm, muted color palette, creating a gentle and inviting aesthetic.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 12,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-30-07.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-classic-book-cover-",
+      "label": "Publishing · Designed-creative · Audible",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#F5F0E0",
+        "secondary": "#332D2A",
+        "accent": "#2C5A8C"
+      },
+      "composition": "The central text, including the title and author, is prominently placed against a light background, framed by symmetrical blue floral patterns, creating a balanced and inviting focal hierarchy.",
+      "mood": [
+        "Elegant",
+        "Classic",
+        "Calm",
+        "Literary",
+        "Intriguing"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design employs a classic book cover layout, featuring a prominent central title and author name, elegantly framed by symmetrical illustrated floral motifs.",
+      "textOnCanvas": {
+        "fontWeight": "serif",
+        "wordCount": 14,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-30-15.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-employs-a-high-contrast-vibra",
+      "label": "Publishing · Designed-creative · Audible",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#33CC33",
+        "secondary": "#CCFF33",
+        "accent": "#FFCC00"
+      },
+      "composition": "The central text block dominates the canvas, positioned prominently in the middle with significant green breathing room, establishing a clear focal hierarchy from the large title to smaller supporting text.",
+      "mood": [
+        "Energetic",
+        "Direct",
+        "Optimistic",
+        "Bold"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design employs a high-contrast, vibrant color palette combined with bold, sans-serif typography to create a dynamic and attention-grabbing visual hierarchy for the title.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 24,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-30-27.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-utilizes-strong-contrast-betw",
+      "label": "Publishing · Designed-creative · Audible",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#0a2e3d",
+        "secondary": "#a17a2d",
+        "accent": "#00ff00"
+      },
+      "composition": "A central figure is framed by an elaborate golden spherical structure that also encompasses a glowing green skull and a secondary character's face, creating a dense and mysterious focal hierarchy within a dark, atmospheric setting.",
+      "mood": [
+        "Mysterious",
+        "Magical",
+        "Intriguing",
+        "Dark",
+        "Epic"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design utilizes strong contrast between the dark, atmospheric background and vibrant, glowing elements, employing a complex layered composition to frame key narrative symbols and characters within an intricate metallic structure.",
+      "textOnCanvas": {
+        "fontWeight": "display",
+        "wordCount": 15,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-30-47.png"
+      ]
+    },
+    {
+      "id": "publishing-designed-creative-the-design-uses-bold-contrasting-colors-",
+      "label": "Publishing · Designed-creative · Audible",
+      "sector": "publishing",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#C00000",
+        "secondary": "#FFD700",
+        "accent": "#FFFFFF"
+      },
+      "composition": "The composition is text-heavy with a clear central hierarchy, using stacked text blocks and prominent yellow banners to convey key information with minimal breathing room.",
+      "mood": [
+        "Informative",
+        "Urgent",
+        "Direct",
+        "Authoritative",
+        "Bold"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design uses bold, contrasting colors (red, yellow, white) and large, sans-serif typography to create a high-impact, information-dense layout.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 48,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-31-30.png"
+      ]
+    },
+    {
+      "id": "promotional-designed-creative-the-design-utilizes-bold-contrasting-typ",
+      "label": "Promotional · Designed-creative · Blinkist",
+      "sector": "promotional",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#1A1A1A",
+        "secondary": "#FFFFFF",
+        "accent": "#00CC00"
+      },
+      "composition": "The composition features a strong vertical hierarchy, with the brand and headline at the top, a large discount offer centrally placed, and a row of illustrated book covers at the bottom, all against a dark background providing clear visual separation.",
+      "mood": [
+        "Informative",
+        "Promotional",
+        "Direct",
+        "Modern",
+        "Engaging"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design utilizes bold, contrasting typography and a dark background to emphasize the discount and product offerings, creating a clear and impactful promotional message.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 88,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-32-11.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-employs-a-flat-illustration-s",
+      "label": "Subscription · Designed-creative · Everand",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#E0E8EB",
+        "secondary": "#52A0A0",
+        "accent": "#F7FF33"
+      },
+      "composition": "A central character is positioned slightly to the left, holding a strap and looking at a phone, with ample breathing room around them, while a brand wordmark occupies the top right and a prominent call-to-action button is placed in the bottom right.",
+      "mood": [
+        "modern",
+        "casual",
+        "everyday",
+        "convenient",
+        "calm"
+      ],
+      "photographicStyle": "illustration",
+      "technique": "The design employs a flat illustration style with clean lines and solid color blocks to depict a modern, everyday scene.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 3,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-33-00.png"
+      ]
+    },
+    {
+      "id": "subscription-clean-image-the-image-uses-a-shallow-depth-of-field-",
+      "label": "Subscription · Clean-image · Everand",
+      "sector": "subscription",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#E0FFFF",
+        "secondary": "#D4B88C",
+        "accent": "#000000"
+      },
+      "composition": "Three books with headphones are centrally placed, creating a clear focal point, with ample breathing room around the subjects and a wooden surface providing a stable base.",
+      "mood": [
+        "calm",
+        "intellectual",
+        "modern",
+        "focused",
+        "serene"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The image uses a shallow depth of field and a cool blue backlighting to highlight the subjects and create a serene, contemporary atmosphere.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-33-07.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-image-employs-a-dynamic-overlapping-",
+      "label": "Subscription · Designed-creative · Everand",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#33CC99",
+        "secondary": "#FFFFFF",
+        "accent": "#CC66FF"
+      },
+      "composition": "Two angled digital devices, a tablet and a smartphone, overlap and dominate the canvas, showcasing digital content with the tablet as the primary focal point.",
+      "mood": [
+        "modern",
+        "digital",
+        "engaging",
+        "accessible",
+        "vibrant"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The image employs a dynamic, overlapping arrangement of digital devices to demonstrate the product's interface and content.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 49,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-33-12.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-utilizes-a-split-background-w",
+      "label": "Subscription · Designed-creative · Everand",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#3C2C54",
+        "secondary": "#D9F06C",
+        "accent": "#F0E040"
+      },
+      "composition": "The composition features a dominant headline in the upper left, balanced by three product images in the lower center, with ample negative space providing clear visual separation.",
+      "mood": [
+        "inviting",
+        "modern",
+        "informative",
+        "accessible",
+        "engaging"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design utilizes a split background with a dark gradient at the top transitioning to a bright gradient at the bottom, creating distinct zones for text and product display.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 32,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-33-29.png"
+      ]
+    },
+    {
+      "id": "saas-designed-creative-the-design-employs-a-strong-visual-hiera",
+      "label": "Saas · Designed-creative · Notion",
+      "sector": "saas",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#E64A2E",
+        "accent": "#1A1A1A"
+      },
+      "composition": "The composition features a large, bold headline in the top-left, balanced by a product UI screenshot in the bottom-right, with a prominent arrow guiding the eye towards the product.",
+      "mood": [
+        "modern",
+        "efficient",
+        "helpful",
+        "clean",
+        "organized"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a strong visual hierarchy with large, sans-serif typography for the headline and a contrasting, organic shape to frame the product interface, creating a dynamic yet clean aesthetic.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 7,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-34-01.png"
+      ]
+    },
+    {
+      "id": "services-clean-image-a-shallow-depth-of-field-is-used-to-crea",
+      "label": "Services · Clean-image · Thumbtack",
+      "sector": "services",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#2C2C2C",
+        "secondary": "#A0A0A0",
+        "accent": "#E06020"
+      },
+      "composition": "The close-up shot centrally frames hands using a wrench on pipes, with limited breathing room, making the tools and action the clear focal point.",
+      "mood": [
+        "Practical",
+        "Focused",
+        "Industrial",
+        "Diligent"
+      ],
+      "photographicStyle": "photo",
+      "technique": "A shallow depth of field is used to create a sharp focus on the hands and wrench, isolating them against a blurred, dark background to emphasize the task.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-35-58.png"
+      ]
+    },
+    {
+      "id": "services-clean-image-the-image-employs-a-split-screen-compari",
+      "label": "Services · Clean-image · Thumbtack",
+      "sector": "services",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#E0E0E0",
+        "secondary": "#6B4226",
+        "accent": "#708C5D"
+      },
+      "composition": "Two kitchen scenes are placed side-by-side, filling the frame to showcase a before-and-after comparison, with the transformation itself serving as the primary focal point.",
+      "mood": [
+        "Transformative",
+        "Modern",
+        "Clean",
+        "Improved",
+        "Practical"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The image employs a split-screen comparison technique to visually demonstrate the significant renovation of a kitchen space.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-36-21.png"
+      ]
+    },
+    {
+      "id": "services-clean-image-a-shallow-depth-of-field-is-employed-to-",
+      "label": "Services · Clean-image · Thumbtack",
+      "sector": "services",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#212121",
+        "secondary": "#D4BBA4",
+        "accent": "#C7A252"
+      },
+      "composition": "The hand holding a pen is centrally placed, dominating the frame with a tight focus on the writing action, creating a clear focal hierarchy on the task at hand.",
+      "mood": [
+        "Professional",
+        "Focused",
+        "Serious",
+        "Diligent",
+        "Formal"
+      ],
+      "photographicStyle": "photo",
+      "technique": "A shallow depth of field is employed to sharply focus on the hand and pen, isolating the subject from the softly blurred background.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-36-42.png"
+      ]
+    },
+    {
+      "id": "ecommerce-home-clean-image-the-image-utilizes-warm-diffused-lightin",
+      "label": "Ecommerce-home · Clean-image · Wayfair",
+      "sector": "ecommerce-home",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#D4C7B8",
+        "secondary": "#6B4D3C",
+        "accent": "#FFF8E1"
+      },
+      "composition": "The tall, illuminated floor lamp stands as the central focal point, flanked by a sofa on the right and a plant with shelving on the left, creating a balanced and inviting interior scene with ample breathing room.",
+      "mood": [
+        "Cozy",
+        "Warm",
+        "Inviting",
+        "Modern",
+        "Serene"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The image utilizes warm, diffused lighting from the central lamp to create a soft, inviting ambiance, highlighting the modern interior design.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-37-33.png"
+      ]
+    },
+    {
+      "id": "ecommerce-home-clean-image-the-product-is-presented-in-a-lifestyle-",
+      "label": "Ecommerce-home · Clean-image · Wayfair",
+      "sector": "ecommerce-home",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#363636",
+        "secondary": "#D4C7B3",
+        "accent": "#FFFFFF"
+      },
+      "composition": "The rocking chair is centrally placed with ample breathing room, making it the clear focal point, supported by surrounding greenery and a small side table.",
+      "mood": [
+        "Relaxing",
+        "Inviting",
+        "Cozy",
+        "Serene",
+        "Outdoor"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The product is presented in a lifestyle setting, emphasizing its use and aesthetic appeal in an outdoor patio environment.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-37-50.png"
+      ]
+    },
+    {
+      "id": "ecommerce-home-clean-image-the-technique-employs-lifestyle-product-",
+      "label": "Ecommerce-home · Clean-image · Wayfair",
+      "sector": "ecommerce-home",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#6D727A",
+        "secondary": "#A0522D",
+        "accent": "#F0F0F0"
+      },
+      "composition": "The German Shepherd dog resting on the pet sofa is centrally placed, occupying the lower-middle frame with ample breathing room provided by the surrounding elegant room, establishing the dog and sofa as the clear focal point.",
+      "mood": [
+        "Comfortable",
+        "Relaxed",
+        "Elegant",
+        "Peaceful"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The technique employs lifestyle product photography, showcasing the pet sofa in a realistic, aspirational home environment with a dog model to demonstrate comfort and utility.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-38-12.png"
+      ]
+    },
+    {
+      "id": "ecommerce-apparel-clean-image-the-product-is-isolated-on-a-pure-white-",
+      "label": "Ecommerce-apparel · Clean-image · Allbirds",
+      "sector": "ecommerce-apparel",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#E0DED7",
+        "secondary": "#7B7E6B",
+        "accent": "#B88B5D"
+      },
+      "composition": "The shoe is centrally placed and slightly angled, occupying a significant portion of the canvas while maintaining ample white space around it, ensuring the product is the undisputed focal point.",
+      "mood": [
+        "clean",
+        "modern",
+        "minimalist",
+        "focused",
+        "fresh"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The product is isolated on a pure white background with a subtle drop shadow, highlighting its form and texture without any environmental distractions.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-39-03.png"
+      ]
+    },
+    {
+      "id": "ecommerce-apparel-clean-image-product-isolation-is-achieved-through-a-",
+      "label": "Ecommerce-apparel · Clean-image · Allbirds",
+      "sector": "ecommerce-apparel",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#EAE4D9",
+        "secondary": "#FFFFFF",
+        "accent": "#D2CFC8"
+      },
+      "composition": "A single light-colored shoe is centrally placed and angled on a pure white background, leaving generous breathing room to emphasize the product as the sole focal point.",
+      "mood": [
+        "clean",
+        "minimalist",
+        "fresh",
+        "simple"
+      ],
+      "photographicStyle": "photo",
+      "technique": "Product isolation is achieved through a high-key lighting setup and a pure white background, highlighting the shoe's texture and form.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-39-36.png"
+      ]
+    },
+    {
+      "id": "native-clean-image-a-shallow-depth-of-field-is-employed-to-",
+      "label": "Native · Clean-image · ArtMasterClass",
+      "sector": "native",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#D4C3B0",
+        "secondary": "#E0B0A8",
+        "accent": "#F08040"
+      },
+      "composition": "Two women are prominently placed in the foreground, slightly off-center, creating a clear focal hierarchy on their interaction, with ample breathing room around them.",
+      "mood": [
+        "joyful",
+        "friendly",
+        "engaging",
+        "warm",
+        "authentic"
+      ],
+      "photographicStyle": "photo",
+      "technique": "A shallow depth of field is employed to isolate the smiling subjects from the colorful, blurred background, drawing attention to their expressions.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-41-00.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-employs-a-clean-two-part-vert",
+      "label": "Subscription · Designed-creative · Skillshare",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#000000",
+        "accent": "#12E7B4"
+      },
+      "composition": "The composition features a prominent text block at the top, followed by a headshot of a man occupying the lower half, with ample white space providing clear separation and hierarchy.",
+      "mood": [
+        "Educational",
+        "Informative",
+        "Approachable",
+        "Professional",
+        "Engaging"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a clean, two-part vertical layout, separating a prominent text block at the top from a photographic subject in the lower half, enhanced by subtle brand-colored graphic accents.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 23,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-41-54.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-employs-a-vibrant-abstract-mu",
+      "label": "Subscription · Designed-creative · Skillshare",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FFFFFF",
+        "secondary": "#FFD700",
+        "accent": "#00B050"
+      },
+      "composition": "A smiling woman is centrally positioned in the lower half, framed by vibrant, abstract stripes, with significant white space above for prominent textual elements, establishing a clear hierarchy from headline to subject.",
+      "mood": [
+        "Creative",
+        "Energetic",
+        "Friendly",
+        "Inspiring",
+        "Joyful"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a vibrant, abstract, multi-colored background to highlight a smiling photographic subject, creating an energetic and inviting visual while prominently featuring a sans-serif headline.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 12,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-42-07.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-employs-a-flat-lay-aesthetic-",
+      "label": "Subscription · Designed-creative · Skillshare",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#FFC300",
+        "secondary": "#FFFFFF",
+        "accent": "#00E676"
+      },
+      "composition": "The composition features a large text block on the left, balanced by a human hand interacting with miniature paper craft objects and a planner on the right, all set against a vibrant yellow background with flowing green lines guiding the eye.",
+      "mood": [
+        "Vibrant",
+        "Creative",
+        "Inspiring",
+        "Playful",
+        "Organized"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a flat lay aesthetic with paper craft miniatures and a human hand, enhanced by dynamic green lines and bold, sans-serif typography to convey creativity and structured learning.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 5,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-42-22.png"
+      ]
+    },
+    {
+      "id": "lifestyle-clean-image-an-overhead-flat-lay-shot-captures-multi",
+      "label": "Lifestyle · Clean-image · Skillshare",
+      "sector": "lifestyle",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#F5DDCF",
+        "secondary": "#00A0FF",
+        "accent": "#FFD700"
+      },
+      "composition": "The image features an overhead flat lay of multiple hands interacting with various craft supplies spread across a light pink pegboard, creating a busy yet engaging scene with no single dominant focal point.",
+      "mood": [
+        "playful",
+        "creative",
+        "collaborative",
+        "vibrant",
+        "busy"
+      ],
+      "photographicStyle": "photo",
+      "technique": "An overhead flat lay shot captures multiple hands engaged in a crafting activity, showcasing a rich assortment of colorful supplies and emphasizing a sense of shared creativity.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-42-53.png"
+      ]
+    },
+    {
+      "id": "subscription-designed-creative-the-design-employs-a-high-contrast-vibra",
+      "label": "Subscription · Designed-creative · Skillshare",
+      "sector": "subscription",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#20D0E0",
+        "secondary": "#FF6633",
+        "accent": "#00E000"
+      },
+      "composition": "The composition features a prominent central text block balanced by dynamic visual elements in the lower right, creating a clear focal hierarchy with ample breathing room.",
+      "mood": [
+        "Vibrant",
+        "Creative",
+        "Playful",
+        "Energetic"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a high-contrast, vibrant color scheme and a dynamic diagonal visual flow to draw attention to the central message and interactive elements.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 10,
+        "placement": "center"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-43-18.png"
+      ]
+    },
+    {
+      "id": "saas-clean-image-a-shallow-depth-of-field-is-employed-to-",
+      "label": "Saas · Clean-image · WiseTime / Clio",
+      "sector": "saas",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#2C3E50",
+        "secondary": "#FFFFFF",
+        "accent": "#8B4513"
+      },
+      "composition": "The subject, a woman, is centrally framed with ample breathing room, establishing her face and contemplative expression as the clear focal point.",
+      "mood": [
+        "contemplative",
+        "thoughtful",
+        "calm",
+        "focused"
+      ],
+      "photographicStyle": "photo",
+      "technique": "A shallow depth of field is employed to isolate the subject, drawing attention to her contemplative expression against a softly blurred background.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-43-43.png"
+      ]
+    },
+    {
+      "id": "auto-designed-creative-the-design-employs-a-split-composition-f",
+      "label": "Auto · Designed-creative · CarWise Peoria",
+      "sector": "auto",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#1A2B40",
+        "secondary": "#E00000",
+        "accent": "#FFFFFF"
+      },
+      "composition": "A woman and a silver SUV are prominently placed on the right, balancing a dense block of text and a large headline on the left, with the call to action at the bottom.",
+      "mood": [
+        "optimistic",
+        "approachable",
+        "dynamic",
+        "convenient"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design employs a split composition, featuring a photographic subject on the right balanced by a text-heavy, graphically enhanced information panel on the left, culminating in a prominent, glowing call-to-action button.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 21,
+        "placement": "overlay"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-44-12.png"
+      ]
+    },
+    {
+      "id": "native-clean-image-the-use-of-warm-ambient-lighting-combine",
+      "label": "Native · Clean-image · Revolution Event Design",
+      "sector": "native",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#D4C4A8",
+        "secondary": "#F8F8F8",
+        "accent": "#5C704B"
+      },
+      "composition": "The image features a wide shot of a grand event hall, with multiple round tables and ornate white archways distributed across the midground and foreground, leading the eye towards the high ceilings and architectural details in the background, creating a sense of depth and spaciousness.",
+      "mood": [
+        "elegant",
+        "luxurious",
+        "grand",
+        "festive",
+        "inviting"
+      ],
+      "photographicStyle": "photo",
+      "technique": "The use of warm, ambient lighting combined with intricate white decorative structures creates a sophisticated and inviting atmosphere, emphasizing the grandeur of the event space.",
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-45-40.png"
+      ]
+    },
+    {
+      "id": "fintech-designed-creative-the-design-uses-a-high-contrast-color-sc",
+      "label": "Fintech · Designed-creative · Robinhood Crypto",
+      "sector": "fintech",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#BFFF00",
+        "secondary": "#000000",
+        "accent": "#FFFFFF"
+      },
+      "composition": "The composition features a central smartphone in the lower half, balanced by a prominent headline and brand name in the upper half, all set against a spacious, bright background.",
+      "mood": [
+        "Energetic",
+        "Modern",
+        "Direct",
+        "Clean",
+        "Informative"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design uses a high-contrast color scheme with a vibrant background to make the black text and phone stand out, creating a bold and attention-grabbing visual.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 86,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-46-06.png"
+      ]
+    },
+    {
+      "id": "fintech-designed-creative-the-design-uses-a-strong-color-block-to-",
+      "label": "Fintech · Designed-creative · Robinhood Legend",
+      "sector": "fintech",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#AFFF00",
+        "secondary": "#1A1A1A",
+        "accent": "#000000"
+      },
+      "composition": "The composition is divided into two distinct vertical halves, with a large, high-contrast headline on a bright background dominating the left, and a detailed, darker trading interface occupying the right, creating a clear focal hierarchy from text to product.",
+      "mood": [
+        "Energetic",
+        "Informative",
+        "Modern",
+        "Direct"
+      ],
+      "photographicStyle": "mixed",
+      "technique": "The design uses a strong color block to separate a prominent textual call-to-action and branding from a detailed product screenshot, creating visual contrast and guiding the viewer's eye.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 29,
+        "placement": "top"
+      },
+      "sourceFiles": [
+        "Screenshot from 2026-06-19 16-46-19.png"
+      ]
+    }
+  ]
+}

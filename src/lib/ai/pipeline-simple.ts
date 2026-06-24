@@ -1,12 +1,17 @@
 /**
  * Fast / one-shot pipeline.
  *
- *   architect → 1 master image call → 1 logo image call → sharp → persist
+ *   architect → 1 master image call → sharp → persist
  *
- * Total Gemini image calls: 2 (master + logo).
- * Sharp then crops the master into landscape / square / portrait
- * variants, and the logo into square + landscape logo variants — all
- * 5 Google Ads sizes for ~$0.08 of Gemini spend per campaign.
+ * Total Gemini image calls: 1 (master only).
+ * Sharp crops the master into landscape / square / portrait variants
+ * for the 3 marketing slots. Logo is NOT generated here — most
+ * customers have an existing logo they'd rather upload. The form
+ * exposes an explicit "Generate logo for me" button that calls
+ * `generateLogoOnlyAction` if they don't have one.
+ *
+ * Total fast-mode spend: ~$0.04 of Gemini per campaign (down from
+ * ~$0.08 when logo was auto-generated).
  */
 import { renderImage } from "./image-generator";
 import { persistGeneratedImage } from "./asset-persistence";
@@ -24,37 +29,23 @@ export async function runSimplePipeline(
   plan: CampaignPlan,
   opts: { userId: string; accountId: string | null },
 ): Promise<GeneratedAssetIds> {
-  // Generate master + logo in parallel — they don't depend on each other.
-  const [masterImg, logoImg] = await Promise.all([
-    renderImage(plan.prompts.master),
-    renderImage(plan.prompts.logo),
-  ]);
+  const masterImg = await renderImage(plan.prompts.master);
 
-  const [masterParentId, logoParentId] = await Promise.all([
-    persistGeneratedImage(masterImg, {
-      userId: opts.userId,
-      accountId: opts.accountId,
-      isLogo: false,
-      label: `AI · ${brief.brandName} · master (fast)`,
-      auditSource: "pipeline-simple:master",
-    }),
-    persistGeneratedImage(logoImg, {
-      userId: opts.userId,
-      accountId: opts.accountId,
-      isLogo: true,
-      label: `AI · ${brief.brandName} · logo (fast)`,
-      auditSource: "pipeline-simple:logo",
-    }),
-  ]);
+  const masterParentId = await persistGeneratedImage(masterImg, {
+    userId: opts.userId,
+    accountId: opts.accountId,
+    isLogo: false,
+    label: `AI · ${brief.brandName} · master (fast)`,
+    auditSource: "pipeline-simple:master",
+  });
 
   // All 3 marketing role slots point at the same master parent. The PMAX
   // adapter resolves the right sharp variant per role at launch time.
-  // Both logo role slots point at the logo parent.
+  // Logo slots intentionally omitted — the user fills them via upload
+  // or `generateLogoOnlyAction`.
   return {
     marketingImageAssetId: masterParentId,
     squareMarketingImageAssetId: masterParentId,
     portraitMarketingImageAssetId: masterParentId,
-    logoAssetId: logoParentId,
-    landscapeLogoAssetId: logoParentId,
   };
 }

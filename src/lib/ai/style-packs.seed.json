@@ -128,6 +128,43 @@
       "sourceFiles": ["Screenshot from 2026-06-19 16-34-01.png"]
     },
     {
+      "id": "saas-dashboard-on-dark-panel",
+      "label": "SaaS / B2B · Dashboard mockup on dark brand panel (clean)",
+      "sector": "saas",
+      "mode": "clean-image",
+      "palette": {
+        "primary": "#0F172A",
+        "secondary": "#22C55E",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Dark navy background fills the canvas; an isometric dashboard card with one bold accent-color chart line trending upward sits centered, occupying 50-60% of canvas; soft glow under the chart; subtle grid hint behind dashboard; no real data values.",
+      "mood": ["modern", "confident", "data-driven", "trustworthy", "premium"],
+      "photographicStyle": "illustration",
+      "technique": "Isometric dashboard mockup with one accent-color chart line on a dark navy field — proof-of-product visual without showing real customer data.",
+      "sourceFiles": []
+    },
+    {
+      "id": "saas-brand-panel-with-ui",
+      "label": "SaaS / B2B · Saturated brand panel + headline + UI mockup (designed)",
+      "sector": "saas",
+      "mode": "designed-creative",
+      "palette": {
+        "primary": "#22C55E",
+        "secondary": "#0F172A",
+        "accent": "#FFFFFF"
+      },
+      "composition": "Saturated brand-color panel fills the canvas; bold sans headline left-aligned in the top-half (dark text on bright BG, or vice versa); product UI screenshot or isometric dashboard tilted slightly in the lower-right; small brand wordmark in top-right corner.",
+      "mood": ["energetic", "confident", "modern", "punchy"],
+      "photographicStyle": "mixed",
+      "technique": "Brand-color panel + bold sans headline left + tilted UI mockup right + small wordmark — Robinhood Legend energy for B2B SaaS.",
+      "textOnCanvas": {
+        "fontWeight": "sans",
+        "wordCount": 6,
+        "placement": "top"
+      },
+      "sourceFiles": []
+    },
+    {
       "id": "services-hands-doing-work",
       "label": "Local services · Hands-doing-work close-up",
       "sector": "services",

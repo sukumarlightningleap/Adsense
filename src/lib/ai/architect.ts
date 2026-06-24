@@ -167,16 +167,57 @@ PROMPT TYPES:
                vector-style, brand-color, NO literal text rendering.
 
 HARD RULES — apply to ALL prompts:
-  • NO text, NO CTA button, NO advertiser-identity bar, NO "See more ads"
-    chip inside the image canvas.
-    EXCEPTION: if the chosen pack is "designed-creative", you MAY bake the
-    main headline into the canvas as the central typographic element —
-    nothing else.
-  • Subject occupies 40-60% of canvas, centered or rule-of-thirds.
-  • Keep all important elements within the inner 60% (safe zone — sharp
-    will center-crop to landscape 1.91:1 and portrait 4:5).
-  • ONE dominant brand color + neutrals. Never rainbow.
-  • Follow the chosen pack's technique sentence to the letter.
+
+  1. SINGLE DOMINANT COLOR
+     • Use ONE saturated brand color plus neutrals (white / black / cream).
+     • Never use multiple competing brand colors. No rainbow.
+     • Stick to the palette hexes in the chosen STYLE PACK above.
+
+  2. NO AI-STOCK CLICHÉS  — these scream "generic AI startup" and must
+     NEVER appear in any prompt:
+       • Glowing humanoid heads or "AI brain" silhouettes
+       • Circuit board / motherboard / chip patterns
+       • Matrix-style code rain (green text on dark)
+       • Holographic neural networks or "data streams in space"
+       • Robot hands shaking human hands
+       • Glowing wireframe globes or geometric tunnels
+       • Floating "AI" / "ML" / "Big Data" hologram text
+       • Generic blue-purple gradient backgrounds with abstract particles
+     If the chosen pack covers a tech / SaaS / fintech / AI brief,
+     prefer: clean UI mockups, dashboard cards with one chart line,
+     person-at-laptop photography, isometric flat illustration,
+     OR the pack's own technique sentence — NEVER the clichés above.
+
+  3. MODE-SPECIFIC RULES (read the pack's "Mode" line, then apply):
+
+     CLEAN-IMAGE MODE  (pack mode = clean-image)
+       • Subject occupies 40-60% of canvas, centered or rule-of-thirds
+       • Background is a neutral or single-color block — no scene clutter
+       • NO text inside the canvas — no headline, no CTA, no wordmark
+       • Google overlays headline + description + CTA externally
+
+     DESIGNED-CREATIVE MODE  (pack mode = designed-creative)
+       • MANDATORY: bake ONE headline into the canvas (4-8 words max).
+         The headline placement, font weight, and word count are
+         specified in the pack's "Text on canvas:" line — follow it.
+       • Sans-serif for modern / tech / SaaS. Serif for premium / heritage.
+         Display-weight only for promotional / urgency.
+       • White text on dark BG; dark text on bright BG. High contrast.
+       • Brand wordmark allowed but SMALL (≤5% of canvas height, corner
+         only — never the main subject).
+       • NO CTA button in the canvas — Google still renders that.
+       • Visual subject occupies 30-50% of the remaining canvas.
+
+  4. FOLLOW THE PACK PRESCRIPTIVELY
+     • The chosen pack's "Composition:" and "Technique:" sentences are
+       MANDATORY — do not invent a different layout.
+     • If the pack says "Multi-cover grid + serif headline" you produce
+       a grid + serif headline, not your own interpretation.
+
+  5. SAFE ZONE
+     • Keep all critical content (subject + text + wordmark) within the
+       inner 80% of the canvas. Sharp center-crops the master to 1.91:1
+       landscape and 4:5 portrait — edges WILL be trimmed.
 
 Return ONLY JSON matching the schema. No prose, no markdown fences.`;
 }

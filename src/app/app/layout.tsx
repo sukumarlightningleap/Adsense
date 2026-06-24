@@ -4,7 +4,7 @@ import { auth, signOut } from "@/auth";
 import { getEffectiveDemoMode } from "@/lib/demo/cookie";
 
 import { setDemoModeAction } from "./_actions";
-import { MobileTopBar, Sidebar } from "./_components/sidebar";
+import { AppShellClient } from "./_components/app-shell-client";
 
 /**
  * Protected app shell.
@@ -42,19 +42,14 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-full flex-1 flex-col lg:flex-row">
-      <Sidebar
+      <AppShellClient
         user={sidebarUser}
         signOutAction={handleSignOut}
         demoMode={demoMode}
         setDemoModeAction={setDemoModeAction}
-      />
-      <MobileTopBar
-        user={sidebarUser}
-        signOutAction={handleSignOut}
-        demoMode={demoMode}
-        setDemoModeAction={setDemoModeAction}
-      />
-      <main className="flex-1 lg:pl-60">{children}</main>
+      >
+        {children}
+      </AppShellClient>
     </div>
   );
 }
